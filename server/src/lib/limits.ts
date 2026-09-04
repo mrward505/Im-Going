@@ -14,14 +14,15 @@ export async function shareBudgetRemaining(
   userId: string,
   now: Date = new Date(),
 ): Promise<{ remaining: number; date: Date }> {
-  const { rows } = await pool.query<{ shares_today: number; shares_date: string | null }>(
-    "SELECT shares_today, shares_date FROM users WHERE id = $1",
+  // Day comparison happens in SQL (CURRENT_DATE) — node-pg's DATE parsing
+  // varies (string vs Date), so never compare the raw value in JS.
+  const { rows } = await pool.query<{ shares_today: number; is_today: boolean }>(
+    "SELECT shares_today, (shares_date = CURRENT_DATE) AS is_today FROM users WHERE id = $1",
     [userId],
   );
   const row = rows[0];
   if (!row) return { remaining: SHARE_LIMIT_PER_DAY, date: now };
-  const sameDay = row.shares_date === now.toISOString().slice(0, 10);
-  if (!sameDay) return { remaining: SHARE_LIMIT_PER_DAY, date: now };
+  if (!row.is_today) return { remaining: SHARE_LIMIT_PER_DAY, date: now };
   return {
     remaining: Math.max(0, SHARE_LIMIT_PER_DAY - row.shares_today),
     date: now,
@@ -36,15 +37,15 @@ export async function consumeShare(
 ): Promise<number> {
   const day = now.toISOString().slice(0, 10);
   const { rows } = await pool.query<{ shares_today: number }>(
-    `INSERT INTO users (id, shares_today, shares_date)
-     VALUES ($1, 1, $2)
-     ON CONFLICT (id) DO UPDATE SET
+    `UPDATE users SET
        shares_today = CASE
-         WHEN users.shares_date = EXCLUDED.shares_date THEN users.shares_today + 1
+         WHEN shares_date = $2::date THEN shares_today + 1
          ELSE 1 END,
-       shares_date = EXCLUDED.shares_date
+       shares_date = $2::date
+     WHERE id = $1
      RETURNING shares_today`,
     [userId, day],
   );
+  if (!rows[0]) return SHARE_LIMIT_PER_DAY; // user vanished mid-request; fail open on budget
   return Math.max(0, SHARE_LIMIT_PER_DAY - rows[0].shares_today);
 }

@@ -67,7 +67,7 @@ export async function spotTrending(pool: Pool, opts: TrendExecOptions = {}): Pro
             ROUND(SUM(
               LEAST(2.0, GREATEST(0.25, 1 + 0.5 * (u.star_rating - 3)))
               * CASE WHEN u.verified_checkin_count > 0
-                        AND u.last_verified_at >= now() - interval '90 days'
+                        AND lv.last_verified_at >= now() - interval '90 days'
                      THEN 1 ELSE 0.5 END
             )::numeric, 2)::float AS trending_score
      FROM events e

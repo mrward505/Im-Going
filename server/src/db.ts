@@ -54,6 +54,8 @@ export interface GoingRow {
   event_id: string;
   user_id: string;
   status: string;
+  settlement_kind: string | null; // Slice 3: showup | no_show | soft_no_show | free_cancel | unverifiable
+  settled_at: string | null;
   created_at: string;
 }
 
@@ -160,7 +162,7 @@ export async function serializeEventForViewer(
   now: Date = new Date(),
 ): Promise<EventForViewer> {
   const [{ rows: goingRows }, goingCount, myGoing] = await Promise.all([
-    pool.query<GoingRow>("SELECT id, event_id, user_id, status, created_at FROM going WHERE event_id = $1 AND status = 'active' ORDER BY created_at", [event.id]),
+    pool.query<GoingRow>("SELECT id, event_id, user_id, status, settlement_kind, settled_at, created_at FROM going WHERE event_id = $1 AND status = 'active' ORDER BY created_at", [event.id]),
     pool.query<{ n: number }>("SELECT count(*)::int AS n FROM going WHERE event_id = $1 AND status = 'active'", [event.id]),
     viewerId
       ? pool.query<{ n: number }>("SELECT count(*)::int AS n FROM going WHERE event_id = $1 AND user_id = $2 AND status = 'active'", [event.id, viewerId])
@@ -188,7 +190,7 @@ export async function getGoingRow(
   userId: string,
 ): Promise<GoingRow | undefined> {
   const { rows } = await client.query<GoingRow>(
-    "SELECT id, event_id, user_id, status, created_at FROM going WHERE event_id = $1 AND user_id = $2",
+    "SELECT id, event_id, user_id, status, settlement_kind, settled_at, created_at FROM going WHERE event_id = $1 AND user_id = $2",
     [eventId, userId],
   );
   return rows[0];

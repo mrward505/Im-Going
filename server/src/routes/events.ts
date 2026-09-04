@@ -5,8 +5,6 @@ import {
   findEventById, findSpotById, getGoingRow, serializeEventForViewer, serializeSpotRaw,
 } from "../db";
 import { badRequest, conflict, notFound } from "../lib/errors";
-import { FREE_CANCEL_DELTA, SOFT_NO_SHOW_DELTA, UNVERIFIABLE_DELTA } from "../lib/reputation";
-import { getConfig } from "../env";
 
 // Spec §2b: future dates capped at 14 days out (Open Decision 9: recommended).
 const MAX_DAYS_AHEAD = 14;
@@ -18,7 +16,6 @@ export const announceEventSchema = z.object({
   note: z.string().max(140).optional(),
 });
 
-const goingParamsSchema = z.object({ id: z.string().uuid() });
 
 /** Resolve the shared Event for (spot, upcoming start): snap to the earliest
  *  active event on that spot starting within the same UTC day, else create. */
@@ -113,40 +110,11 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ event: view });
   });
 
-  // --- cancel my Going (free ≥ 2h before start; soft no-show otherwise) ---
-  app.delete("/api/v1/events/:id/going", {
-    preHandler: app.authenticate,
-  }, async (req, reply) => {
-    const claims = req.userClaims!;
-    const { id } = req.params as { id: string };
-    const event = await findEventById(pool, id);
-    if (!event) throw notFound("event not found");
-    const spot = (await findSpotById(pool, event.spot_id))!;
-
-    const going = await getGoingRow(pool, id, claims.sub);
-    if (!going || going.status !== "active") throw conflict("you have no active going on this event");
-
-    await pool.query(`UPDATE going SET status = 'cancelled' WHERE id = $1`, [going.id]);
-
-    // Settlement semantics (spec §2e). Slice 3 writes the actual ledger rows
-    // + user cache; until then we report the outcome without mutating points.
-    const hoursBefore = (new Date(event.start_at).getTime() - Date.now()) / 3_600_000;
-    let settlement: "free_cancel" | "soft_no_show" | "unverifiable" = "unverifiable";
-    let delta = UNVERIFIABLE_DELTA;
-    if (hoursBefore >= 2) {
-      settlement = "free_cancel";
-      delta = FREE_CANCEL_DELTA;
-    } else if (hoursBefore >= 0) {
-      settlement = "soft_no_show"; // < 2h: soft no-show (−30)
-      delta = SOFT_NO_SHOW_DELTA;
-    }
-    // If the event window already elapsed with no check-in and location was
-    // granted (the no-show path), settlement = "no_show" is decided here at
-    // Slice 3 (repuation_ledger not yet written by this endpoint).
-
-    const view = await serializeEventForViewer(pool, event, spot, claims.sub);
-    return reply.send({ event: view, settlement, points_delta_report_only: delta });
-  });
+  // --- cancel my Going -------------------------------------------------------
+  // NOTE (Slice 3): the real handler lives in src/routes/checkins.ts, which
+  // registers DELETE /api/v1/events/:id/going with ledger-backed settlement
+  // (free_cancel ≥ 2 h, soft_no_show < 2 h). This file must NOT register the
+  // same route twice — checkins.ts owns it.
 
   // --- event detail (custom spot mask unlocks only for confirmers) --------
   app.get("/api/v1/events/:id", async (req) => {
