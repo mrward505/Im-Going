@@ -8,6 +8,7 @@ import { getPool, closePool, ping } from "./db/pool";
 import { migrateUp } from "./db/migrate";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSpotRoutes } from "./routes/spots";
+import { registerVenueRoutes } from "./routes/venues";
 import { registerEventRoutes } from "./routes/events";
 import { toApiError } from "./lib/errors";
 import { verifyToken, type SafeUserClaims } from "./lib/tokens";
@@ -72,6 +73,7 @@ export async function buildApp() {
 
   await registerAuthRoutes(app);
   await registerSpotRoutes(app);
+  await registerVenueRoutes(app);
   await registerEventRoutes(app);
 
   // Central error handler → { error: { code, message } }.
