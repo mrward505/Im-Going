@@ -1,0 +1,21 @@
+# dependencies / builds
+node_modules/
+dist/
+build/
+
+# environment & secrets — never commit
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
+
+# local runtime artifacts
+data/
+*.log
+.run/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
