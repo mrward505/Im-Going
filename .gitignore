@@ -10,7 +10,7 @@ build/
 !**/.env.example
 
 # local runtime artifacts
-data/
+/server/data/
 *.log
 .run/
 

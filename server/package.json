@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "migrate": "bun src/db/migrate.ts up",
-    "migrate:status": "bun src/db/migrate.ts status"
+    "migrate:status": "bun src/db/migrate.ts status",
+    "seed": "bun seed/seed.ts",
+    "seed:check": "bun seed/seed.ts --check"
   },
   "dependencies": {
     "fastify": "^5.2.0",
