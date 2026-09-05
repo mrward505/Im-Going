@@ -238,13 +238,21 @@ describe("slice 3 live: check-in + settlement + trending + shares", () => {
     const { getPool } = await import("../src/db/pool");
     const pool = getPool();
     const u = await newUser("latecancel");
-    // event starting in 60 min: announce via API (≥30 min out passes the guard)
-    const spot = await pool.query<{ id: string }>(`SELECT id FROM spots WHERE is_verified LIMIT 1`);
+    // event starting in 60 min: announce via API (≥30 min out passes the guard).
+    // NOTE: must use a dedicated fresh spot (not `LIMIT 1` over verified spots):
+    // announce day-snaps to any active same-day event on the spot, and the
+    // fixture's 'The 44' has one at now()+3h — snapping to it would make the
+    // cancel compute free_cancel instead of soft_no_show.
+    const fresh = await pool.query<{ id: string }>(
+      `INSERT INTO spots (name, lat, lon, geofence_radius_m, category, is_verified, city)
+       VALUES ('Late Cancel Spot', 33.42, -111.93, 150, 'bar', true, 'Tempe') RETURNING id`,
+    );
+    const spotId = fresh.rows[0].id;
     const startAt = new Date(Date.now() + 60 * 60_000).toISOString();
     const ev = await jfetch("/api/v1/events", {
       method: "POST",
       headers: await authz(u.token),
-      body: JSON.stringify({ spot_id: spot.rows[0].id, start_at: startAt }),
+      body: JSON.stringify({ spot_id: spotId, start_at: startAt }),
     });
     expect(ev.status).toBe(201);
     const eventId = (ev.body.event as Record<string, unknown>).id as string;
