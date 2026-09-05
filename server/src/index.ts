@@ -51,6 +51,36 @@ export async function buildApp() {
     }
   });
 
+  // CORS (dev allow-list): the Expo web preview (localhost:8082) calls this
+  // API from the browser, so preflights + credentialed cross-origin reads need
+  // explicit headers. Prod stays strict: only origins in CORS_ORIGINS (comma
+  // separated) or the localhost dev defaults below ever get headers.
+  const corsOrigins = new Set(
+    (process.env.CORS_ORIGINS ?? "")
+      .split(",")
+      .map((s) => s.trim().replace(/\/$/, ""))
+      .filter(Boolean)
+      .concat([
+        "http://localhost:8082",
+        "http://localhost:8081",
+        "http://127.0.0.1:8082",
+        "http://127.0.0.1:8081",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      ]),
+  );
+  app.addHook("onRequest", async (req, reply) => {
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && corsOrigins.has(origin)) {
+      reply.header("access-control-allow-origin", origin);
+      reply.header("vary", "Origin");
+      reply.header("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+      reply.header("access-control-allow-headers", "content-type, authorization");
+      reply.header("access-control-max-age", "86400");
+      if (req.method === "OPTIONS") return reply.code(204).send();
+    }
+  });
+
   // Health (no auth; proves DB reachability).
   app.get("/health", async (_req, reply) => {
     try {

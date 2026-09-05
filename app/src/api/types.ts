@@ -2,6 +2,11 @@
  * Shared API types for I'm Going — mirrored 1:1 from the server's response
  * shapes (server/src/db.ts serializers + routes). Keep in sync when the
  * backend contract changes.
+ *
+ * Slice 4b note: the 4a draft of this file was aspirational (going lists,
+ * posts, is_custom/created_by/confirmed flags). The server actually returns
+ * masked SpotForViewer cards + lean EventForViewer rows — this file now
+ * matches the wire reality.
  */
 
 export interface ApiErrorBody {
@@ -15,6 +20,13 @@ export interface OtpRequestResponse {
   provider: string;
   dev_code?: string;
 }
+
+export type SettlementKind =
+  | "showup"
+  | "no_show"
+  | "soft_no_show"
+  | "free_cancel"
+  | "unverifiable";
 
 /** /api/v1/auth/otp/verify — existing user → login; new user → signup token */
 export type OtpVerifyResponse =
@@ -32,12 +44,12 @@ export interface MeResponse {
   user: User;
 }
 
+/** serializeUser (server/src/db.ts) — note: no dob on the wire. */
 export interface User {
   id: string;
   phone: string;
   display_name: string;
   username: string;
-  dob: string; // YYYY-MM-DD
   city: string;
   reputation_points: number;
   star_rating: number; // 1.0–5.0
@@ -45,60 +57,48 @@ export interface User {
   created_at: string;
 }
 
+/** Spot.category CHECK: bar|club|concert|restaurant|house|other */
 export type SpotCategory =
   | "bar"
   | "club"
+  | "concert"
   | "restaurant"
-  | "coffee"
-  | "concert_venue"
-  | "campus"
   | "house"
   | "other";
 
-/** A spot as returned by serializers. Custom spots are masked (confirmed flag). */
+/**
+ * SpotForViewer (serializeSpotRaw). Custom (unverified) spots are masked:
+ * exact address + lat/lon are absent (undefined) until the viewer confirms
+ * going; masked_address carries "Private spot in [city]" (spec §2b).
+ */
 export interface Spot {
   id: string;
   name: string;
+  masked_address: string | null;
   address: string | null;
-  lat: number | null;
-  lon: number | null;
-  geofence_radius_m: number | null;
-  category: SpotCategory;
+  lat?: number;
+  lon?: number;
+  geofence_radius_m: number;
+  category: string;
+  is_verified: boolean;
   is_large_venue: boolean;
   city: string;
-  is_verified: boolean; // true for POI venues, false for custom spots
-  is_custom: boolean;
-  created_by: string | null;
-  // Custom-spot masking: exact address/lat/lon are null for the viewer until
-  // they confirm going to an event on this spot (spec §2b).
-  confirmed: boolean;
 }
 
+/** EventForViewer (serializeEventForViewer) — lean row, no going list. */
 export interface EventView {
   id: string;
   spot: Spot;
   start_at: string;
-  end_at: string | null;
+  default_end: string;
   note: string | null;
-  status: "active" | "cancelled";
-  created_by: string;
+  status: string;
+  window: { start: string; end: string };
   going_count: number;
-  i_am_going: boolean;
-  going: Array<{ user_id: string; display_name: string; username: string; star_rating: number }>;
-  can_check_in: boolean; // true inside [start-30m, start+150m]
-  checked_in: boolean;
-  posts: Array<{
-    id: string;
-    user_id: string;
-    display_name: string;
-    type: "photo" | "video";
-    caption: string | null;
-    object_key: string;
-    created_at: string;
-  }>;
+  my_going: boolean;
 }
 
-/** GET /api/v1/trending */
+/** GET /api/v1/trending — top-20 spots with events in the next 48 h. */
 export interface TrendingResponse {
   trending: Array<{
     spot: Spot;
@@ -107,6 +107,8 @@ export interface TrendingResponse {
     trending_score: number;
   }>;
 }
+
+export type TrendingRow = TrendingResponse["trending"][number];
 
 /** GET /api/v1/venues?q=&category=&page=&limit=&lat=&lon=&radius_m= */
 export interface VenuesResponse {
@@ -125,6 +127,21 @@ export interface VenuesResponse {
   limit: number;
   total: number;
   total_pages: number;
+}
+
+export type Venue = VenuesResponse["venues"][number];
+
+/** GET /api/v1/spots?q=&city=&category=&limit= — bare array (masked). */
+export type SpotsResponse = Spot[];
+
+/** POST /api/v1/spots (201) — creator sees the pin. */
+export interface CreateSpotResponse {
+  spot: Spot;
+}
+
+/** GET /api/v1/spots/:id */
+export interface SpotDetailResponse {
+  spot: Spot;
 }
 
 /** POST /api/v1/events (201) — announce */
@@ -146,26 +163,53 @@ export interface EventDetailResponse {
 
 /** POST /api/v1/events/:id/checkin (201) — manual GPS check-in */
 export interface CheckinResponse {
-  checkin: {
-    id: string;
-    event_id: string;
-    verified: boolean;
-    method: "manual_gps" | "passive";
-    verified_at: string;
-  };
-  reputation: {
-    points: number;
+  checkin_id: string;
+  verified_at: string;
+  spot_id: string;
+  event_id: string;
+  method: "manual_gps" | "passive";
+  first_verified_checkin: boolean;
+  settlement: {
+    kind: SettlementKind;
+    points_delta: number;
+    reputation_points: number;
     star_rating: number;
   };
 }
 
-/** DELETE /api/v1/events/:id/going */
+/** DELETE /api/v1/events/:id/going — cancel with ledger settlement */
 export interface CancelGoingResponse {
   event: EventView;
-  settlement: {
-    kind: "free_cancel" | "soft_no_show" | "no_show" | null;
-    points_delta: number;
+  settlement: SettlementKind | null;
+  points_delta: number;
+  reputation_points: number;
+  star_rating: number;
+}
+
+/** GET /api/v1/me/going — My Plans (slice 4b). */
+export interface MyGoingRow {
+  event: {
+    id: string;
+    spot_id: string;
+    start_at: string;
+    default_end: string;
+    note: string | null;
+    status: string;
+    created_by: string | null;
+    created_at: string;
   };
+  spot: Spot | null;
+  my_going: boolean;
+  start_at: string;
+  settlement_kind: SettlementKind | null;
+  settled_at: string | null;
+  /** ISO instant the free-cancel window closes (start − 2 h, spec §2e). */
+  free_cancel_until: string | null;
+}
+
+export interface MyGoingResponse {
+  upcoming: MyGoingRow[];
+  recent: MyGoingRow[];
 }
 
 /** POST /api/v1/shares (201) / GET /api/v1/shares/budget */
