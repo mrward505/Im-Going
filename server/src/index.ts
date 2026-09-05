@@ -10,6 +10,8 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerSpotRoutes } from "./routes/spots";
 import { registerVenueRoutes } from "./routes/venues";
 import { registerEventRoutes } from "./routes/events";
+import { registerCheckinRoutes } from "./routes/checkins";
+import { registerTrendingRoutes, registerShareRoutes } from "./routes/trending";
 import { toApiError } from "./lib/errors";
 import { verifyToken, type SafeUserClaims } from "./lib/tokens";
 
@@ -75,6 +77,9 @@ export async function buildApp() {
   await registerSpotRoutes(app);
   await registerVenueRoutes(app);
   await registerEventRoutes(app);
+  await registerCheckinRoutes(app);
+  await registerTrendingRoutes(app);
+  await registerShareRoutes(app);
 
   // Central error handler → { error: { code, message } }.
   app.setErrorHandler((err, req, reply) => {

@@ -170,7 +170,9 @@ describe("live API against real Postgres", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(cancel.status).toBe(200);
+    // Slice 3: cancel now writes real settlement (ledger-backed, not report-only).
     expect((cancel.body as { settlement?: string }).settlement).toBe("free_cancel");
+    expect((cancel.body as { points_delta?: number }).points_delta).toBe(0);
   });
 });
 
