@@ -139,9 +139,37 @@ export interface CreateSpotResponse {
   spot: Spot;
 }
 
-/** GET /api/v1/spots/:id */
+/** GET /api/v1/spots/:id — masked card + next event + going state (slice 4c). */
 export interface SpotDetailResponse {
   spot: Spot;
+  next_event: {
+    id: string;
+    start_at: string;
+    default_end: string;
+    note: string | null;
+    status: string;
+  } | null;
+  going_count: number;
+  my_going: boolean;
+}
+/** GET /api/v1/spots/:id/share — share-card snapshot + live share budget (slice 4c). */
+export interface SpotShareResponse {
+  card: {
+    spot_name: string;
+    category: string;
+    address: string | null;
+    masked_address: string | null;
+    is_verified: boolean;
+    city: string;
+    next_start_at: string | null;
+    going_count: number;
+    creator_display_name: string | null;
+  };
+  share: {
+    limit: number;
+    remaining: number | null;
+    deep_link: string;
+  };
 }
 
 /** POST /api/v1/events (201) — announce */

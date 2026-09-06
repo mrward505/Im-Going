@@ -2,10 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../db/pool";
 import {
-  findEventById, findSpotById, getGoingRow, serializeEventForViewer, serializeSpotRaw,
+  findEventById, findSpotById, findUserById, getGoingRow, serializeEventForViewer, serializeSpotRaw,
   type GoingRow,
 } from "../db";
-import { badRequest, conflict, notFound } from "../lib/errors";
+import { SHARE_LIMIT_PER_DAY, shareBudgetRemaining } from "../lib/limits";
+import { badRequest, conflict, notFound, rateLimited } from "../lib/errors";
 
 // Spec §2b: future dates capped at 14 days out (Open Decision 9: recommended).
 const MAX_DAYS_AHEAD = 14;
@@ -129,13 +130,120 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // --- fetch a single spot by id (masking logic shared with search) -------
+  // Returns the masked spot card PLUS the spot-detail fields a client needs
+  // in one round-trip: the next upcoming active event (start time), the live
+  // going count on it, and the viewer's own going state (drives the "I'm
+  // going" toggle + address-unmask for confirmed custom spots).
   app.get("/api/v1/spots/:id", async (req) => {
     const { id } = req.params as { id: string };
     const spot = await findSpotById(pool, id);
     if (!spot) throw notFound("spot not found");
     const viewerId = req.userClaims?.sub ?? null;
     const isCreator = viewerId !== null && spot.created_by === viewerId;
-    return { spot: serializeSpotRaw(spot, { confirmed: isCreator }) };
+    const { rows: nextRows } = await pool.query<{
+      id: string; start_at: string; default_end: string; note: string | null; status: string;
+    }>(
+      `SELECT id, start_at, default_end, note, status FROM events
+       WHERE spot_id = $1 AND status = 'active' AND default_end > now()
+       ORDER BY start_at ASC LIMIT 1`,
+      [id],
+    );
+    const next = nextRows[0] ?? null;
+    let goingCount = 0;
+    let myGoing = false;
+    if (next) {
+      const { rows: c } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM going WHERE event_id = $1 AND status = 'active'",
+        [next.id],
+      );
+      goingCount = c[0]?.n ?? 0;
+      if (viewerId) {
+        const g = await getGoingRow(pool, next.id, viewerId);
+        myGoing = g?.status === "active";
+      }
+    }
+    const confirmed = isCreator || myGoing;
+    return {
+      spot: serializeSpotRaw(spot, { confirmed }),
+      next_event: next
+        ? { id: next.id, start_at: next.start_at, default_end: next.default_end, note: next.note, status: next.status }
+        : null,
+      going_count: goingCount,
+      my_going: myGoing,
+    };
+  });
+
+  // --- shareable snapshot for a spot's share card (§2g) ---------------------
+  // GET /api/v1/spots/:id/share — the server-rendered fields the client bakes
+  // into the one-tap share card (spot name, masked/verified address per
+  // viewer, next event start, going count, creator display name), plus the
+  // live share budget. Same strict 10/day gate as POST /api/v1/shares
+  // (shared budget helper): an authenticated viewer with no budget left gets
+  // 429 rate_limited, so the client knows to disable the Share button.
+  app.get("/api/v1/spots/:id/share", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw notFound("spot not found");
+    }
+    const viewerId = req.userClaims?.sub ?? null;
+    if (viewerId) {
+      const { remaining } = await shareBudgetRemaining(pool, viewerId);
+      if (remaining <= 0) {
+        throw rateLimited(`share limit reached (${SHARE_LIMIT_PER_DAY}/day)`);
+      }
+    }
+    const spot = await findSpotById(pool, id);
+    if (!spot) throw notFound("spot not found");
+    const isCreator = viewerId !== null && spot.created_by === viewerId;
+    const { rows: nextRows } = await pool.query<{ id: string; start_at: string }>(
+      `SELECT id, start_at FROM events
+       WHERE spot_id = $1 AND status = 'active' AND default_end > now()
+       ORDER BY start_at ASC LIMIT 1`,
+      [id],
+    );
+    const next = nextRows[0] ?? null;
+    let goingCount = 0;
+    let myGoing = false;
+    if (next) {
+      const { rows: c } = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM going WHERE event_id = $1 AND status = 'active'",
+        [next.id],
+      );
+      goingCount = c[0]?.n ?? 0;
+      if (viewerId) {
+        const g = await getGoingRow(pool, next.id, viewerId);
+        myGoing = g?.status === "active";
+      }
+    }
+    const confirmed = isCreator || myGoing;
+    const card = serializeSpotRaw(spot, { confirmed });
+    let creatorName: string | null = null;
+    if (spot.created_by) {
+      const creator = await findUserById(pool, spot.created_by);
+      creatorName = creator?.display_name ?? null;
+    }
+    let remaining: number | null = null;
+    if (viewerId) {
+      remaining = (await shareBudgetRemaining(pool, viewerId)).remaining;
+    }
+    return reply.send({
+      card: {
+        spot_name: card.name,
+        category: card.category,
+        address: card.address,
+        masked_address: card.masked_address,
+        is_verified: card.is_verified,
+        city: card.city,
+        next_start_at: next?.start_at ?? null,
+        going_count: goingCount,
+        creator_display_name: creatorName,
+      },
+      share: {
+        limit: SHARE_LIMIT_PER_DAY,
+        remaining,
+        deep_link: `https://imgoing.io/s/${spot.id}`,
+      },
+    });
   });
 
   // --- my going history (spec §3.5 My Plans) -------------------------------
