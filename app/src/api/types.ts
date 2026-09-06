@@ -245,3 +245,74 @@ export interface ShareResponse {
   limit: number;
   remaining: number;
 }
+
+// --- Slice 4d-1: posts / media / moderation -----------------------------------
+
+/** posts.type CHECK: image | video */
+export type PostMediaType = "image" | "video";
+
+/** moderation_reports.reason CHECK (spec §4) */
+export type ModerationReason = "spam" | "harassment" | "nudity" | "violence" | "other";
+
+/**
+ * SerializedPost (server serializePostForViewer). media_url is resolved by the
+ * active storage provider (null when the key is foreign to it).
+ */
+export interface Post {
+  id: string;
+  event_id: string;
+  check_in_id: string;
+  user_id: string;
+  spot_id: string;
+  type: PostMediaType;
+  caption: string | null;
+  object_key: string;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  media_url: string | null;
+  created_at: string;
+}
+
+/** Poster identity that rides on each feed row (spec §2f). */
+export interface FeedPoster {
+  id: string;
+  display_name: string;
+  star_rating: number;
+}
+
+/** GET /api/v1/spots/:id/feed — the spot's Live feed (newest first). */
+export interface SpotFeedResponse {
+  posts: Array<Post & { event: { id: string; start_at: string; status: string; going_count: number }; poster: FeedPoster }>;
+  spot: Spot;
+  pagination: { limit: number; offset: number; count: number };
+}
+
+export type SpotFeedRow = SpotFeedResponse["posts"][number];
+
+/** POST /api/v1/events/:eventId/posts (201) */
+export interface CreatePostResponse {
+  post: Post;
+}
+
+/** POST /api/v1/posts/:postId/report (201) */
+export interface ReportPostResponse {
+  report: {
+    id: string;
+    post_id: string;
+    reason: ModerationReason;
+    status: "open" | "actioned" | "dismissed";
+    created_at: string;
+  };
+}
+
+/** POST /api/v1/media/upload-url (201) — storage contract (spec §2f). */
+export interface RequestUploadUrlResponse {
+  upload: {
+    object_key: string;
+    upload_url: string;
+    method: "PUT";
+    headers: Record<string, string>;
+    expires_at: string;
+  };
+}
