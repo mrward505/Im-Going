@@ -22,6 +22,7 @@ import type {
   RegisterResponse,
   ShareResponse,
   SpotDetailResponse,
+  SpotShareResponse,
   SpotsResponse,
   TrendingResponse,
   VenuesResponse,
@@ -164,6 +165,9 @@ export const api = {
   },
   spot(id: string): Promise<SpotDetailResponse> {
     return request(`/api/v1/spots/${id}`, { auth: false });
+  },
+  spotShare(id: string): Promise<SpotShareResponse> {
+    return request(`/api/v1/spots/${id}/share`);
   },
   announceEvent(input: {
     spot_id: string;

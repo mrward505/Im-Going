@@ -15,6 +15,7 @@ export const unauthorized = (message = "authentication required") => new ApiErro
 export const forbidden = (message = "not allowed") => new ApiError(403, "forbidden", message);
 export const notFound = (message = "not found") => new ApiError(404, "not_found", message);
 export const conflict = (message: string) => new ApiError(409, "conflict", message);
+export const rateLimited = (message: string) => new ApiError(429, "rate_limited", message);
 
 /** Map a thrown value to { statusCode, code, message } for the error handler. */
 export function toApiError(err: unknown): { statusCode: number; code: string; message: string } {

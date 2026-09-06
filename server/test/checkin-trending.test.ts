@@ -338,6 +338,88 @@ describe("slice 3 live: check-in + settlement + trending + shares", () => {
     expect(b1.body.remaining).toBe(0);
   });
 
+  test("spot detail: verified spot returns card + next event + going count", async () => {
+    if (skip) return;
+    const u = await newUser("spotdet");
+    const h = await authz(u.token);
+    const soon = await seedEvent(60); // +1 h → upcoming
+    await confirm(u.token, soon.eventId);
+    const d = await jfetch(`/api/v1/spots/${soon.spotId}`, { headers: h });
+    expect(d.status).toBe(200);
+    const spot = d.body.spot as Record<string, unknown>;
+    expect(typeof spot.name).toBe("string");
+    expect(spot.category).toBe("bar");
+    expect(spot.is_verified).toBe(true);
+    expect(spot.address).toBe("1 Test Way");
+    const next = d.body.next_event as Record<string, unknown>;
+    expect(next.id).toBe(soon.eventId);
+    expect(typeof next.start_at).toBe("string");
+    expect(d.body.going_count).toBe(1);
+    expect(d.body.my_going).toBe(true);
+  });
+
+  test("spot detail: custom spot masks address until confirmed", async () => {
+    if (skip) return;
+    const creator = await newUser("maskmk");
+    const stranger = await newUser("maskst");
+    const hc = await authz(creator.token);
+    const hs = await authz(stranger.token);
+    const cs = await jfetch("/api/v1/spots", {
+      method: "POST",
+      headers: hc,
+      body: JSON.stringify({ name: `Mask House ${Date.now() % 1e7}`, address: "999 Secret Ln", lat: 33.42, lon: -111.93, category: "house" }),
+    });
+    expect(cs.status).toBe(201);
+    const spotId = (cs.body.spot as Record<string, unknown>).id as string;
+    // stranger (no going): masked
+    const anon = await jfetch(`/api/v1/spots/${spotId}`, { headers: hs });
+    expect(anon.status).toBe(200);
+    const masked = anon.body.spot as Record<string, unknown>;
+    expect(masked.address).toBeNull();
+    expect(masked.masked_address).toBe("Private spot in Tempe");
+    expect("lat" in (masked as object)).toBe(false);
+    expect(anon.body.my_going).toBe(false);
+    // creator: unmasked
+    const own = await jfetch(`/api/v1/spots/${spotId}`, { headers: hc });
+    expect((own.body.spot as Record<string, unknown>).address).toBe("999 Secret Ln");
+  });
+
+  test("spot share: snapshot payload + budget + 429 at exhaustion + 404", async () => {
+    if (skip) return;
+    const u = await newUser("spotshr");
+    const h = await authz(u.token);
+    const soon = await seedEvent(60);
+    await confirm(u.token, soon.eventId);
+    const s = await jfetch(`/api/v1/spots/${soon.spotId}/share`, { headers: h });
+    expect(s.status).toBe(200);
+    const card = s.body.card as Record<string, unknown>;
+    expect(typeof card.spot_name).toBe("string");
+    expect(card.category).toBe("bar");
+    expect(card.address).toBe("1 Test Way");
+    expect(card.masked_address).toBeNull();
+    expect(card.is_verified).toBe(true);
+    expect(typeof card.next_start_at).toBe("string");
+    expect(card.going_count).toBe(1);
+    expect(card.creator_display_name).toBeNull(); // seeded spot, no creator
+    const share = s.body.share as Record<string, unknown>;
+    expect(share.limit).toBe(10);
+    expect(share.remaining).toBe(10);
+    expect(share.deep_link).toBe(`https://imgoing.io/s/${soon.spotId}`);
+    // exhaust the budget via POST /shares → snapshot now 429s (same gate)
+    for (let i = 0; i < 10; i++) {
+      await jfetch("/api/v1/shares", { method: "POST", headers: h, body: JSON.stringify({}) });
+    }
+    const gated = await jfetch(`/api/v1/spots/${soon.spotId}/share`, { headers: h });
+    expect(gated.status).toBe(429);
+    expect((gated.body.error as Record<string, unknown>).code).toBe("rate_limited");
+    // unknown id → 404 even with budget elsewhere (fresh user)
+    const fresh = await newUser("spot404");
+    const nf = await jfetch("/api/v1/spots/00000000-0000-0000-0000-000000000000/share", {
+      headers: await authz(fresh.token),
+    });
+    expect(nf.status).toBe(404);
+  });
+
   test("ledger is append-only (UPDATE/DELETE rejected)", async () => {
     if (skip) return;
     const { getPool } = await import("../src/db/pool");

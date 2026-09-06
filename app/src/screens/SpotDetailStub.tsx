@@ -1,14 +1,15 @@
 /**
- * Spot detail — STUB for slice 4b (full spot detail + posts + share card
- * land in 4c per the DoD). Shows the masked spot card per §2b display rules
- * plus the wiring point for the event detail.
+ * Spot detail (slice 4c): masked spot card per §2b display rules, next
+ * upcoming event + live going count + my-going state (from
+ * GET /api/v1/spots/:id), and the share-card snapshot affordance
+ * (GET /api/v1/spots/:id/share, 10/day budget). Posts feed is still later.
  */
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, ApiError } from "../api/client";
-import type { Spot } from "../api/types";
+import type { SpotDetailResponse, SpotShareResponse } from "../api/types";
 import { colors, spacing } from "../theme";
-import { CategoryPill } from "../components/hero";
+import { CategoryPill, formatNextStart } from "../components/hero";
 
 interface Props {
   spotId: string;
@@ -16,19 +17,33 @@ interface Props {
 }
 
 export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
-  const [spot, setSpot] = useState<Spot | null>(null);
+  const [detail, setDetail] = useState<SpotDetailResponse | null>(null);
+  const [share, setShare] = useState<SpotShareResponse | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
       try {
         const res = await api.spot(spotId);
-        setSpot(res.spot);
+        setDetail(res);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : "Could not load this spot.");
       }
     })();
   }, [spotId]);
+
+  const spot = detail?.spot ?? null;
+
+  async function loadShare(): Promise<void> {
+    setShareError(null);
+    try {
+      const res = await api.spotShare(spotId);
+      setShare(res);
+    } catch (e) {
+      setShareError(e instanceof ApiError ? e.message : "Share unavailable.");
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -54,8 +69,29 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
           {!spot.is_verified && spot.address == null ? (
             <Text style={styles.maskNote}>Exact address unlocks after you tap “I&apos;m going.”</Text>
           ) : null}
+          {detail?.next_event ? (
+            <Text style={styles.next}>
+              Next: {formatNextStart(detail.next_event.start_at)} · {detail.going_count} going
+              {detail.my_going ? " · You're in ✓" : ""}
+            </Text>
+          ) : (
+            <Text style={styles.next}>No upcoming event yet — be the first to announce.</Text>
+          )}
+          <View style={styles.shareRow}>
+            <Pressable onPress={() => void loadShare()} style={styles.shareButton}>
+              <Text style={styles.shareButtonText}>Share this spot</Text>
+            </Pressable>
+            {share ? (
+              <Text style={styles.shareLine}>
+                {share.card.spot_name} · {share.card.going_count} going · {share.share.remaining ?? "–"}/
+                {share.share.limit} shares left
+              </Text>
+            ) : shareError ? (
+              <Text style={styles.error}>{shareError}</Text>
+            ) : null}
+          </View>
           <View style={styles.stub}>
-            <Text style={styles.stubText}>Full spot detail — events, going list, check-in, posts, share — lands in 4c.</Text>
+            <Text style={styles.stubText}>Posts feed lands next — spot detail, going state, and share are live.</Text>
           </View>
         </>
       ) : null}
@@ -102,6 +138,32 @@ const styles = StyleSheet.create({
     color: colors.star,
     fontSize: 13,
     marginTop: 4,
+  },
+  next: {
+    color: colors.text,
+    fontSize: 14,
+    marginTop: spacing.sm,
+    fontWeight: "600",
+  },
+  shareRow: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  shareButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+  shareButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  shareLine: {
+    color: colors.textDim,
+    fontSize: 13,
+    lineHeight: 18,
   },
   error: {
     color: colors.danger,
