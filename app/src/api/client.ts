@@ -13,12 +13,16 @@ import type {
   CancelGoingResponse,
   CheckinResponse,
   ConfirmGoingResponse,
+  CreateSpotResponse,
   EventDetailResponse,
   MeResponse,
+  MyGoingResponse,
   OtpRequestResponse,
   OtpVerifyResponse,
   RegisterResponse,
   ShareResponse,
+  SpotDetailResponse,
+  SpotsResponse,
   TrendingResponse,
   VenuesResponse,
 } from "./types";
@@ -133,6 +137,33 @@ export const api = {
     if (params.radius_m !== undefined) qs.set("radius_m", String(params.radius_m));
     const suffix = qs.toString();
     return request(`/api/v1/venues${suffix ? `?${suffix}` : ""}`);
+  },
+  myGoing(): Promise<MyGoingResponse> {
+    return request("/api/v1/me/going");
+  },
+  spots(params: { q?: string; category?: string; limit?: number }): Promise<SpotsResponse> {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.category) qs.set("category", params.category);
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    const suffix = qs.toString();
+    return request(`/api/v1/spots${suffix ? `?${suffix}` : ""}`, { auth: false });
+  },
+  createSpot(input: {
+    name: string;
+    address?: string;
+    lat: number;
+    lon: number;
+    category: string;
+    description?: string;
+  }): Promise<CreateSpotResponse> {
+    return request("/api/v1/spots", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  spot(id: string): Promise<SpotDetailResponse> {
+    return request(`/api/v1/spots/${id}`, { auth: false });
   },
   announceEvent(input: {
     spot_id: string;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getPool } from "../db/pool";
 import {
   findEventById, findSpotById, getGoingRow, serializeEventForViewer, serializeSpotRaw,
+  type GoingRow,
 } from "../db";
 import { badRequest, conflict, notFound } from "../lib/errors";
 
@@ -135,5 +136,76 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     const viewerId = req.userClaims?.sub ?? null;
     const isCreator = viewerId !== null && spot.created_by === viewerId;
     return { spot: serializeSpotRaw(spot, { confirmed: isCreator }) };
+  });
+
+  // --- my going history (spec §3.5 My Plans) -------------------------------
+  // GET /api/v1/me/going — the viewer's Going rows: `upcoming` (active rows on
+  // events that haven't ended yet, soonest first) and `recent` (rows on
+  // already-ended events from the last 7 days, with settlement outcomes —
+  // the "yesterday's outcome" line: showup / no_show / soft_no_show /
+  // free_cancel / unverifiable / pending when settlement hasn't run yet).
+  app.get("/api/v1/me/going", {
+    preHandler: app.authenticate,
+  }, async (req) => {
+    const userId = req.userClaims!.sub;
+    const { rows: upcoming } = await pool.query<{
+      event: Record<string, unknown>;
+      settlement_kind: string | null;
+      settled_at: string | null;
+    }>(
+      `SELECT json_build_object(
+         'id', e.id, 'spot_id', e.spot_id, 'start_at', e.start_at,
+         'default_end', e.default_end, 'note', e.note, 'status', e.status,
+         'created_by', e.created_by, 'created_at', e.created_at
+       ) AS event,
+       g.settlement_kind, g.settled_at
+       FROM going g JOIN events e ON e.id = g.event_id
+       WHERE g.user_id = $1 AND g.status = 'active' AND e.default_end > now()
+       ORDER BY e.start_at ASC LIMIT 50`,
+      [userId],
+    );
+    const { rows: recent } = await pool.query<{
+      event: Record<string, unknown>;
+      settlement_kind: string | null;
+      settled_at: string | null;
+    }>(
+      `SELECT json_build_object(
+         'id', e.id, 'spot_id', e.spot_id, 'start_at', e.start_at,
+         'default_end', e.default_end, 'note', e.note, 'status', e.status,
+         'created_by', e.created_by, 'created_at', e.created_at
+       ) AS event,
+       g.settlement_kind, g.settled_at
+       FROM going g JOIN events e ON e.id = g.event_id
+       WHERE g.user_id = $1 AND e.default_end <= now()
+         AND e.default_end > now() - interval '7 days'
+       ORDER BY e.start_at DESC LIMIT 20`,
+      [userId],
+    );
+    // Attach the masked spot card to each row (creator sees their pin).
+    async function withSpot(
+      rows: { event: Record<string, unknown>; settlement_kind: string | null; settled_at: string | null }[],
+    ): Promise<Array<{ event: Record<string, unknown>; spot: unknown; settlement_kind: string | null; settled_at: string | null }>> {
+      return Promise.all(rows.map(async (r) => {
+        const eventId = r.event.id as string;
+        const spotId = r.event.spot_id as string;
+        const spot = await findSpotById(pool, spotId);
+        const eventRow = await findEventById(pool, eventId);
+        const goingRow = (await getGoingRow(pool, eventId, userId)) as GoingRow | undefined;
+        const confirmed = goingRow?.status === "active" || (spot?.created_by === userId);
+        return {
+          event: r.event,
+          spot: spot ? serializeSpotRaw(spot, { confirmed }) : null,
+          my_going: goingRow?.status === "active",
+          start_at: r.event.start_at,
+          settlement_kind: r.settlement_kind,
+          settled_at: r.settled_at,
+          // Cancel affordance per spec §2e: free while ≥ 2 h before start.
+          free_cancel_until: eventRow
+            ? new Date(new Date(eventRow.start_at).getTime() - 2 * 3_600_000).toISOString()
+            : null,
+        };
+      }));
+    }
+    return { upcoming: await withSpot(upcoming), recent: await withSpot(recent) };
   });
 }

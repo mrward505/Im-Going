@@ -1,8 +1,12 @@
 /**
  * App navigation — root stack (Onboarding → Main tabs) + bottom tabs
  * (Trending | My Plans | Profile) per spec §3.
+ *
+ * Slice 4b: Trending + My Plans are real; Announce is a modal sheet launched
+ * from the FAB; spot rows open the 4b stub (full detail lands in 4c).
  */
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -12,8 +16,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { getToken, setCachedUser } from "../api/tokenStorage";
 import { colors } from "../theme";
 import { OnboardingFlow } from "../screens/onboarding/OnboardingFlow";
-import { PlaceholderScreen } from "../screens/Placeholder";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { TrendingScreen } from "../screens/TrendingScreen";
+import { MyPlansScreen } from "../screens/MyPlansScreen";
+import { AnnounceSheet } from "../screens/AnnounceSheet";
+import { SpotDetailStub } from "../screens/SpotDetailStub";
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -43,41 +50,57 @@ const navTheme = {
 };
 
 function MainTabs({ onLogout }: { onLogout: () => void }): React.JSX.Element {
+  const [announceOpen, setAnnounceOpen] = useState(false);
+  const [openSpotId, setOpenSpotId] = useState<string | null>(null);
+  const [plansTick, setPlansTick] = useState(0);
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textDim,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-      }}
-    >
-      <Tab.Screen
-        name="Trending"
-        component={() => (
-          <PlaceholderScreen
-            title="Trending"
-            subtitle="Top Tempe spots — who's going where tonight."
-          />
-        )}
-        options={{ tabBarIcon: ({ color, size }) => <Ionicons name="flame" size={size} color={color} /> }}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {openSpotId ? (
+        <SpotDetailStub spotId={openSpotId} onBack={() => setOpenSpotId(null)} />
+      ) : (
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: colors.primary,
+            tabBarInactiveTintColor: colors.textDim,
+            tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+          }}
+        >
+          <Tab.Screen
+            name="Trending"
+            options={{ tabBarIcon: ({ color, size }) => <Ionicons name="flame" size={size} color={color} /> }}
+          >
+            {() => (
+              <TrendingScreen
+                onAnnounce={() => setAnnounceOpen(true)}
+                onOpenSpot={(id) => setOpenSpotId(id)}
+              />
+            )}
+          </Tab.Screen>
+          <Tab.Screen
+            name="MyPlans"
+            options={{ tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} /> }}
+          >
+            {() => <MyPlansScreen key={plansTick} />}
+          </Tab.Screen>
+          <Tab.Screen
+            name="Profile"
+            options={{ tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} /> }}
+          >
+            {() => <ProfileScreen onLogout={onLogout} />}
+          </Tab.Screen>
+        </Tab.Navigator>
+      )}
+      <AnnounceSheet
+        visible={announceOpen}
+        onClose={() => setAnnounceOpen(false)}
+        onPublished={() => {
+          setAnnounceOpen(false);
+          setPlansTick((t) => t + 1);
+        }}
       />
-      <Tab.Screen
-        name="MyPlans"
-        component={() => (
-          <PlaceholderScreen
-            title="My Plans"
-            subtitle="Your going announcements and their outcome."
-          />
-        )}
-        options={{ tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} /> }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={() => <ProfileScreen onLogout={onLogout} />}
-        options={{ tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} /> }}
-      />
-    </Tab.Navigator>
+    </View>
   );
 }
 
