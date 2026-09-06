@@ -11,8 +11,10 @@ import { registerSpotRoutes } from "./routes/spots";
 import { registerVenueRoutes } from "./routes/venues";
 import { registerEventRoutes } from "./routes/events";
 import { registerCheckinRoutes } from "./routes/checkins";
+import { registerPostRoutes } from "./routes/posts";
 import { registerTrendingRoutes, registerShareRoutes } from "./routes/trending";
 import { toApiError } from "./lib/errors";
+import { setServerAddress } from "./lib/storage";
 import { verifyToken, type SafeUserClaims } from "./lib/tokens";
 
 declare module "fastify" {
@@ -108,6 +110,7 @@ export async function buildApp() {
   await registerVenueRoutes(app);
   await registerEventRoutes(app);
   await registerCheckinRoutes(app);
+  await registerPostRoutes(app);
   await registerTrendingRoutes(app);
   await registerShareRoutes(app);
 
@@ -132,6 +135,7 @@ export async function start(): Promise<void> {
   const port = cfg.PORT;
   const host = cfg.HOST;
   await app.listen({ port, host });
+  setServerAddress(app.server.address() as { port: number } | null);
   app.log.info({ port, host }, "imgoing-api listening");
 }
 

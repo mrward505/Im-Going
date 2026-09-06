@@ -195,3 +195,82 @@ export async function getGoingRow(
   );
   return rows[0];
 }
+
+// --- posts / moderation (Slice 4d-1, spec §2f/§4) -----------------------------
+
+export interface PostRow {
+  id: string;
+  event_id: string;
+  check_in_id: string;
+  user_id: string;
+  spot_id: string;
+  type: string; // 'image' | 'video' (DB CHECK)
+  caption: string | null;
+  object_key: string;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  created_at: string;
+}
+
+export interface FeedRow extends PostRow {
+  event: { id: string; start_at: string; status: string; going_count: number };
+  poster: { id: string; display_name: string; star_rating: number };
+  spot_is_verified: boolean;
+}
+
+export interface SerializedPost {
+  id: string;
+  event_id: string;
+  check_in_id: string;
+  user_id: string;
+  spot_id: string;
+  type: "image" | "video";
+  caption: string | null;
+  object_key: string;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  media_url: string | null;
+  created_at: string;
+}
+
+/**
+ * Serialize a post (create response) or a feed row (with event/poster joins —
+ * the extra columns ride along harmlessly on the base shape). media_url comes
+ * from the active storage provider's getPublicUrl (null for foreign keys).
+ */
+export function serializePostForViewer(
+  post: PostRow,
+  opts: { media_url: string | null },
+): SerializedPost {
+  return {
+    id: post.id,
+    event_id: post.event_id,
+    check_in_id: post.check_in_id,
+    user_id: post.user_id,
+    spot_id: post.spot_id,
+    type: post.type === "video" ? "video" : "image",
+    caption: post.caption,
+    object_key: post.object_key,
+    width: post.width,
+    height: post.height,
+    duration_s: post.duration_s,
+    media_url: opts.media_url,
+    created_at: post.created_at,
+  };
+}
+
+/**
+ * The Live feed groups by spot, so the poster's display identity rides on the
+ * post row (spec §2f: display_name + star_rating next to each post).
+ */
+export interface FeedPoster {
+  id: string;
+  display_name: string;
+  star_rating: number;
+}
+
+export function serializeFeedPoster(poster: FeedPoster): FeedPoster {
+  return { id: poster.id, display_name: poster.display_name, star_rating: poster.star_rating };
+}

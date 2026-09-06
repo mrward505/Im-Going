@@ -13,15 +13,21 @@ import type {
   CancelGoingResponse,
   CheckinResponse,
   ConfirmGoingResponse,
+  CreatePostResponse,
   CreateSpotResponse,
   EventDetailResponse,
   MeResponse,
+  ModerationReason,
   MyGoingResponse,
   OtpRequestResponse,
   OtpVerifyResponse,
+  PostMediaType,
   RegisterResponse,
+  ReportPostResponse,
+  RequestUploadUrlResponse,
   ShareResponse,
   SpotDetailResponse,
+  SpotFeedResponse,
   SpotShareResponse,
   SpotsResponse,
   TrendingResponse,
@@ -201,6 +207,43 @@ export const api = {
     return request("/api/v1/shares", {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  },
+  // --- Slice 4d-1: posts / media / moderation ---------------------------------
+  spotFeed(spotId: string, params: { limit?: number; offset?: number } = {}): Promise<SpotFeedResponse> {
+    const qs = new URLSearchParams();
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params.offset !== undefined) qs.set("offset", String(params.offset));
+    const suffix = qs.toString();
+    return request(`/api/v1/spots/${spotId}/feed${suffix ? `?${suffix}` : ""}`, { auth: false });
+  },
+  createPost(eventId: string, input: {
+    type: PostMediaType;
+    caption?: string;
+    object_key: string;
+    width?: number;
+    height?: number;
+    duration_s?: number;
+  }): Promise<CreatePostResponse> {
+    return request(`/api/v1/events/${eventId}/posts`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  requestUploadUrl(input: {
+    content_type: "image/jpeg" | "image/png" | "image/heic" | "video/mp4" | "video/quicktime";
+    ext?: string;
+    kind?: "post" | "avatar";
+  }): Promise<RequestUploadUrlResponse> {
+    return request("/api/v1/media/upload-url", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  reportPost(postId: string, reason: ModerationReason): Promise<ReportPostResponse> {
+    return request(`/api/v1/posts/${postId}/report`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     });
   },
   async logout(): Promise<void> {
