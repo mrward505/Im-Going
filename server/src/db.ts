@@ -152,6 +152,8 @@ export interface EventForViewer {
   window: { start: string; end: string };
   going_count: number;
   my_going: boolean;
+  /** Active goings on this event excluding the viewer (null when anonymous). */
+  going_with_you: number | null;
 }
 
 export async function serializeEventForViewer(
@@ -171,6 +173,16 @@ export async function serializeEventForViewer(
   void goingRows;
   const w = eventWindow(event.start_at, now);
   const confirmed = myGoing.rows[0]?.n === 1;
+  // going_with_you — how many OTHER people are on this event with the viewer
+  // (the "audience with you" line). Anonymous viewers get null (unknown self).
+  let goingWithYouCount: number | null = null;
+  if (viewerId) {
+    const { rows } = await pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM going WHERE event_id = $1 AND status = 'active' AND user_id <> $2",
+      [event.id, viewerId],
+    );
+    goingWithYouCount = rows[0]?.n ?? 0;
+  }
   return {
     id: event.id,
     spot: serializeSpotRaw(spot, { confirmed }),
@@ -181,6 +193,7 @@ export async function serializeEventForViewer(
     window: { start: w.start.toISOString(), end: w.end.toISOString() },
     going_count: goingCount.rows[0]?.n ?? 0,
     my_going: confirmed,
+    going_with_you: goingWithYouCount,
   };
 }
 
