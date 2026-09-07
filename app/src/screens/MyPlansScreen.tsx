@@ -19,6 +19,7 @@ import { api, ApiError } from "../api/client";
 import type { MyGoingRow, SettlementKind } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill } from "../components/hero";
+import { GoingWithYou } from "../components/live";
 
 const OUTCOME_COPY: Record<SettlementKind, { label: string; color: string }> = {
   showup: { label: "Showed ✓", color: colors.success },
@@ -79,6 +80,9 @@ function PlanCard({
           “{row.event.note}”
         </Text>
       ) : null}
+      <View style={styles.gwyWrap}>
+        <GoingWithYou count={row.going_with_you} mine={row.my_going} />
+      </View>
       <View style={styles.cardFoot}>
         <Text style={[styles.outcome, { color: outcomeFor(row).color }]}>{outcomeFor(row).label}</Text>
         {row.my_going && row.event.status === "active" ? (
@@ -264,6 +268,9 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 13,
     fontStyle: "italic",
+    marginTop: spacing.sm,
+  },
+  gwyWrap: {
     marginTop: spacing.sm,
   },
   cardFoot: {

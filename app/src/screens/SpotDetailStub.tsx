@@ -45,6 +45,7 @@ import type {
 } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill, StarTag, formatNextStart } from "../components/hero";
+import { GoingWithYou, HeatBadge } from "../components/live";
 import { PostComposerSheet } from "../components/PostComposerSheet";
 
 interface Props {
@@ -348,7 +349,17 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
         </View>
       ) : spot ? (
         <>
-          <Text style={styles.name}>{spot.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{spot.name}</Text>
+            <HeatBadge
+              signals={{
+                going_now: detail?.going_now ?? 0,
+                heat_level: detail?.heat_level ?? 0,
+                heat_count: detail?.heat_count ?? 0,
+              }}
+              size="sm"
+            />
+          </View>
           <View style={styles.meta}>
             <CategoryPill category={spot.category} />
             <Text style={styles.city}>{spot.city}</Text>
@@ -366,10 +377,20 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
           ) : null}
 
           {next ? (
-            <View style={styles.eventCard}>
+            <View style={[styles.eventCard, myGoing && styles.eventCardMine]}>
               <Text style={styles.next}>
                 Next: {formatNextStart(next.start_at)} · {goingCount} going
               </Text>
+              {detail?.going_now != null && detail.going_now > 0 ? (
+                <Text style={styles.liveNowDetail}>
+                  <Text style={styles.liveDot}>●</Text> {detail.going_now} here now
+                </Text>
+              ) : null}
+              {detail?.going_with_you != null ? (
+                <View style={styles.gwyWrap}>
+                  <GoingWithYou count={detail.going_with_you} mine={detail.my_going} />
+                </View>
+              ) : null}
               {next.note ? (
                 <Text style={styles.note} numberOfLines={2}>
                   “{next.note}”
@@ -552,6 +573,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 24,
     fontWeight: "800",
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   meta: {
     flexDirection: "row",
@@ -586,10 +614,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  eventCardMine: {
+    borderColor: colors.primary,
+  },
   next: {
     color: colors.text,
     fontSize: 14,
     fontWeight: "600",
+  },
+  liveNowDetail: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: spacing.xs,
+  },
+  liveDot: {
+    color: colors.accent,
+    fontSize: 10,
+  },
+  gwyWrap: {
+    marginTop: spacing.sm,
   },
   note: {
     color: colors.textDim,

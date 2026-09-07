@@ -23,6 +23,7 @@ import type {
   OtpRequestResponse,
   OtpVerifyResponse,
   PostMediaType,
+  PullResponse,
   RegisterResponse,
   ReportPostResponse,
   RequestUploadUrlResponse,
@@ -175,6 +176,14 @@ export const api = {
   },
   spotShare(id: string): Promise<SpotShareResponse> {
     return request(`/api/v1/spots/${id}/share`);
+  },
+  /** My own influencer pull (Slice 4d-3a: "watch the room fill"). */
+  myPull(): Promise<PullResponse> {
+    return request("/api/v1/me/pull");
+  },
+  /** Another user's influencer pull (Slice 4d-3a). */
+  userPull(userId: string): Promise<PullResponse> {
+    return request(`/api/v1/users/${userId}/pull`, { auth: false });
   },
   announceEvent(input: {
     spot_id: string;
