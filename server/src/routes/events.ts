@@ -6,6 +6,7 @@ import {
   type GoingRow,
 } from "../db";
 import { SHARE_LIMIT_PER_DAY, shareBudgetRemaining } from "../lib/limits";
+import { goingWithYou, influencerPull, spotAudience } from "../lib/audience";
 import { badRequest, conflict, notFound, rateLimited } from "../lib/errors";
 
 // Spec §2b: future dates capped at 14 days out (Open Decision 9: recommended).
@@ -204,6 +205,14 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       );
       myCheckedIn = (c.rows[0]?.n ?? 0) > 0;
     }
+    // Live-audience signals — real data only (Slice 4d-3a): bodies on the
+    // floor right now (active goings on events whose check-in window contains
+    // the server clock) + the 60-minute confirmation-velocity heat badge.
+    // going_with_you = other people on the next event with the viewer
+    // (null for anonymous viewers — no self to exclude).
+    const audience = await spotAudience(pool, id);
+    const goingWithNext =
+      next && viewerId ? await goingWithYou(pool, next.id, viewerId) : null;
     return {
       spot: serializeSpotRaw(spot, { confirmed }),
       next_event: next
@@ -212,6 +221,10 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       going_count: goingCount,
       my_going: myGoing,
       my_checked_in: myCheckedIn,
+      going_with_you: goingWithNext,
+      going_now: audience.going_now,
+      heat_count: audience.heat_count,
+      heat_level: audience.heat_level,
     };
   });
 
@@ -259,6 +272,9 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     }
     const confirmed = isCreator || myGoing;
     const card = serializeSpotRaw(spot, { confirmed });
+    // Live signals ride on the card (Slice 4d-3a) so the share itself is the
+    // ad: real bodies right now + confirmation velocity, never invented.
+    const audience = next ? await spotAudience(pool, id) : { going_now: 0, heat_count: 0, heat_level: 0 as const };
     let creatorName: string | null = null;
     if (spot.created_by) {
       const creator = await findUserById(pool, spot.created_by);
@@ -278,6 +294,9 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
         city: card.city,
         next_start_at: next?.start_at ?? null,
         going_count: goingCount,
+        going_now: audience.going_now,
+        heat_count: audience.heat_count,
+        heat_level: audience.heat_level,
         creator_display_name: creatorName,
       },
       share: {
@@ -334,7 +353,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     // Attach the masked spot card to each row (creator sees their pin).
     async function withSpot(
       rows: { event: Record<string, unknown>; settlement_kind: string | null; settled_at: string | null }[],
-    ): Promise<Array<{ event: Record<string, unknown>; spot: unknown; settlement_kind: string | null; settled_at: string | null }>> {
+    ): Promise<Array<{ event: Record<string, unknown>; spot: unknown; settlement_kind: string | null; settled_at: string | null; going_with_you: number }>> {
       return Promise.all(rows.map(async (r) => {
         const eventId = r.event.id as string;
         const spotId = r.event.spot_id as string;
@@ -342,6 +361,9 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
         const eventRow = await findEventById(pool, eventId);
         const goingRow = (await getGoingRow(pool, eventId, userId)) as GoingRow | undefined;
         const confirmed = goingRow?.status === "active" || (spot?.created_by === userId);
+        // "N people are going with you" — active goings excluding ME
+        // (Slice 4d-3a: the audience line on my own announcements).
+        const goingWith = await goingWithYou(pool, eventId, userId);
         return {
           event: r.event,
           spot: spot ? serializeSpotRaw(spot, { confirmed }) : null,
@@ -349,6 +371,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
           start_at: r.event.start_at,
           settlement_kind: r.settlement_kind,
           settled_at: r.settled_at,
+          going_with_you: goingWith,
           // Cancel affordance per spec §2e: free while ≥ 2 h before start.
           free_cancel_until: eventRow
             ? new Date(new Date(eventRow.start_at).getTime() - 2 * 3_600_000).toISOString()
@@ -357,5 +380,29 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       }));
     }
     return { upcoming: await withSpot(upcoming), recent: await withSpot(recent) };
+  });
+
+  // --- influencer pull (Slice 4d-3a: "watch the room fill") ----------------
+  // GET /api/v1/users/:id/pull — real aggregates over the user's announced
+  // events: how many announcements, how many confirmations they drew (own
+  // rows excluded), and their goers' follow-through (showups ÷ verdicts;
+  // free_cancel / unverifiable / pending are neutral non-verdicts per spec).
+  // All from real going/events rows — nullable where there is no data yet.
+  app.get("/api/v1/users/:id/pull", async (req) => {
+    const { id } = req.params as { id: string };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw notFound("user not found");
+    }
+    const user = await findUserById(pool, id);
+    if (!user) throw notFound("user not found");
+    return { user_id: id, pull: await influencerPull(pool, id) };
+  });
+
+  // GET /api/v1/me/pull — my own pull (same numbers, authenticated shortcut).
+  app.get("/api/v1/me/pull", {
+    preHandler: app.authenticate,
+  }, async (req) => {
+    const userId = req.userClaims!.sub;
+    return { user_id: userId, pull: await influencerPull(pool, userId) };
   });
 }
