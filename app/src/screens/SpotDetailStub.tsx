@@ -14,7 +14,10 @@
  *   inline — image rendered, video as a placeholder with duration/size),
  *   pull-to-refresh, load-more pagination.
  * - Report button per post: reason picker → POST /posts/:id/report.
- * - Share: STUB in this task (disabled button; card wiring lands next).
+ * - Share: GET /spots/:id/share → native share sheet via RN Share (web
+ *   navigator.share) → POST /shares attribution; 429 (10/day budget) surfaces
+ *   as a friendly line and flips to the disabled state.
+ * - Post composer: gated on my_checked_in — "Post" appears after check-in.
  *
  * Navigation contract is unchanged: props { spotId, onBack }.
  */
@@ -32,14 +35,17 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { api, ApiError } from "../api/client";
+import { shareSpot, shareErrorCopy } from "../api/shareCard";
 import type {
   EventGoingResponse,
   ModerationReason,
+  Post,
   SpotDetailResponse,
   SpotFeedRow,
 } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill, StarTag, formatNextStart } from "../components/hero";
+import { PostComposerSheet } from "../components/PostComposerSheet";
 
 interface Props {
   spotId: string;
@@ -152,6 +158,9 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
   const [checkedIn, setCheckedIn] = useState(false);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const [reportingId, setReportingId] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareDisabled, setShareDisabled] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const loadFeedPage = useCallback(
     async (offset: number): Promise<void> => {
@@ -281,8 +290,36 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
     }
   }
 
+  async function sendShare(): Promise<void> {
+    if (shareDisabled) return;
+    setShareError(null);
+    try {
+      const res = await shareSpot(spotId, {
+        eventId: detail?.next_event?.id ?? undefined,
+        record: true,
+      });
+      if (res.status === "dismissed" || res.status === "copied") {
+        // dismissed or copied-to-clipboard — no record, no toast
+        if (res.remaining === 0) setShareDisabled(true);
+        return;
+      }
+      if (res.remaining === 0) setShareDisabled(true);
+    } catch (e) {
+      setShareError(shareErrorCopy(e));
+      if (e instanceof ApiError && e.status === 429) setShareDisabled(true);
+    }
+  }
+
+  function handlePosted(_post: Post): void {
+    // close the composer and refresh the live feed from the server so the
+    // fresh post carries real poster identity (name + stars)
+    setComposerOpen(false);
+    void load("quiet");
+  }
+
   const spot = detail?.spot ?? null;
   const next = detail?.next_event ?? null;
+  const eventIdForComposer = next?.id ?? null;
   const win = next ? checkinWindow(next.start_at) : null;
   const now = Date.now();
   const inWindow = win != null && now >= win.open && now <= win.close;
@@ -370,6 +407,14 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
                   </Pressable>
                 ) : null}
                 {checkedIn ? <Text style={styles.verified}>Checked in ✓</Text> : null}
+                {checkedIn ? (
+                  <Pressable
+                    onPress={() => setComposerOpen(true)}
+                    style={({ pressed }) => [styles.postButton, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.goingButtonText}>Post 📸</Text>
+                  </Pressable>
+                ) : null}
               </View>
               {!inWindow && !checkedIn ? (
                 <Text style={styles.windowHint}>
@@ -405,10 +450,23 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
           ) : null}
 
           <View style={styles.shareRow}>
-            <Pressable disabled style={styles.shareButtonStub}>
-              <Text style={styles.shareButtonText}>Share</Text>
+            <Pressable
+              onPress={() => void sendShare()}
+              disabled={shareDisabled}
+              style={({ pressed }) => [
+                styles.shareButton,
+                shareDisabled && styles.shareButtonDisabled,
+                pressed && !shareDisabled && styles.pressed,
+              ]}
+            >
+              <Text style={styles.shareButtonText}>
+                {shareDisabled ? "Daily share limit reached" : "Share — I'm going"}
+              </Text>
             </Pressable>
-            <Text style={styles.stubNote}>Share card lands in the next task.</Text>
+            {shareError ? <Text style={styles.inlineError}>{shareError}</Text> : null}
+            {!shareDisabled ? (
+              <Text style={styles.stubNote}>Share the card to any app — your night, your audience.</Text>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -442,6 +500,12 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
           </View>
         </>
       ) : null}
+      <PostComposerSheet
+        visible={composerOpen && eventIdForComposer != null}
+        eventId={eventIdForComposer ?? ""}
+        onClose={() => setComposerOpen(false)}
+        onPosted={handlePosted}
+      />
     </ScrollView>
   );
 }
@@ -626,18 +690,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     gap: spacing.sm,
   },
-  shareButtonStub: {
+  shareButton: {
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-    borderRadius: 10,
+    borderColor: colors.primary,
+    borderRadius: 999,
     paddingVertical: spacing.sm,
     alignItems: "center",
+  },
+  shareButtonDisabled: {
+    borderColor: colors.border,
     opacity: 0.6,
   },
   shareButtonText: {
-    color: colors.textDim,
+    color: colors.text,
     fontWeight: "700",
     fontSize: 15,
   },
@@ -645,6 +711,12 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 12,
     fontStyle: "italic",
+  },
+  postButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   post: {
     backgroundColor: colors.card,

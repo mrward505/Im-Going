@@ -61,7 +61,15 @@ export async function shareSpot(
       clipboard?: { writeText: (t: string) => Promise<void> };
     };
     if (nav.share) {
-      await nav.share({ title: "I'm Going", text: message });
+      try {
+        await nav.share({ title: "I'm Going", text: message });
+      } catch (e) {
+        // User dismissed the in-app share dialog — treat as a dismiss, not an error.
+        if (e instanceof Error && /abort/i.test(e.message)) {
+          return { status: "dismissed", remaining: snap.share.remaining };
+        }
+        throw e;
+      }
     } else if (nav.clipboard) {
       await nav.clipboard.writeText(message);
       if (record) {

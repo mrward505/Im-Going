@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { api, ApiError } from "../api/client";
+import { shareSpot, shareErrorCopy } from "../api/shareCard";
 import type { EventView, Spot, Venue } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill } from "../components/hero";
@@ -78,6 +79,8 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
 
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ event: EventView; snapped: boolean } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reset = useCallback(() => {
@@ -95,6 +98,8 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
     setNote("");
     setError(null);
     setDone(null);
+    setSharing(false);
+    setShareMsg(null);
   }, []);
 
   useEffect(() => {
@@ -204,6 +209,30 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
     }
   }
 
+  async function shareTheAnnouncement(): Promise<void> {
+    if (!done || sharing) return;
+    setSharing(true);
+    setShareMsg(null);
+    try {
+      const res = await shareSpot(done.event.spot.id, {
+        eventId: done.event.id,
+        record: true,
+      });
+      if (res.status === "shared") {
+        setShareMsg(
+          res.remaining === 0
+            ? "Shared — today's 10/day budget is used up."
+            : `Shared 🎉 ${res.remaining} of 10 left today.`,
+        );
+      }
+      // dismissed / copied → no message needed
+    } catch (e) {
+      setShareMsg(`Share failed: ${shareErrorCopy(e)}`);
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.sheet}>
@@ -235,6 +264,14 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
             <Pressable onPress={onClose} style={styles.primary}>
               <Text style={styles.primaryText}>Done</Text>
             </Pressable>
+            <Pressable onPress={() => void shareTheAnnouncement()} disabled={sharing} style={styles.sharePrimary}>
+              {sharing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryText}>Share — I'm going</Text>
+              )}
+            </Pressable>
+            {shareMsg ? <Text style={styles.doneNote}>{shareMsg}</Text> : null}
           </View>
         ) : step === "pick" ? (
           <>
@@ -573,6 +610,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 16,
+  },
+  sharePrimary: {
+    marginTop: spacing.sm,
+    paddingVertical: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: "center",
+    minWidth: 200,
   },
   ghost: {
     marginTop: spacing.sm,

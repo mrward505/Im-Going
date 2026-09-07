@@ -1,11 +1,15 @@
 /**
  * Post composer sheet (slice 4d-2, spec §2f): reachable only with a verified
- * check-in for the event. Pick an image or short video (expo-image-picker),
- * add a ≤140-char caption, then upload via the storage contract
- * (requestUploadUrl → PUT bytes → createPost(object_key)).
+ * check-in for the event (the Spot Detail gates on `my_checked_in`). Take a
+ * photo or short clip with the camera, or pick from the library
+ * (expo-image-picker), add a ≤140-char caption, then upload via the storage
+ * contract (requestUploadUrl → PUT bytes with XHR upload progress →
+ * createPost(object_key)).
  *
- * Guards: image ≤ 10 MB / video ≤ 25 MB before upload; progress + error
- * states; 409 (already posted from this check-in) surfaced as a friendly line.
+ * Guards: image ≤ 10 MB / video ≤ 25 MB before upload (picker quality 0.8 is
+ * the client-side compression); staged upload progress + error states; 409
+ * (already posted from this check-in) and 403 (no check-in) surfaced as
+ * friendly lines.
  */
 import React, { useState } from "react";
 import {
@@ -51,15 +55,8 @@ interface Picked {
   duration_s?: number;
 }
 
-async function pickMedia(kind: PostMediaType): Promise<Picked | null> {
-  const mediaTypes =
-    kind === "image" ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos;
-  const res = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes,
-    allowsMultipleSelection: false,
-    quality: 0.8,
-    videoMaxDuration: 60,
-  });
+/** Normalize an ImagePicker result into our Picked shape (asset decides type). */
+function toPicked(res: ImagePicker.ImagePickerResult): Picked | null {
   if (res.canceled || res.assets.length === 0) return null;
   const a = res.assets[0]!;
   const type: PostMediaType = a.type === "video" ? "video" : "image";
@@ -69,20 +66,71 @@ async function pickMedia(kind: PostMediaType): Promise<Picked | null> {
     fileName: a.fileName ?? (type === "video" ? "clip.mp4" : "photo.jpg"),
     width: a.width,
     height: a.height,
-    duration_s: type === "video" && a.duration ? Math.round(a.duration / 1000) : undefined,
+    duration_s: type === "video" && a.duration != null ? Math.round(a.duration / 1000) : undefined,
   };
 }
 
+/** Camera shot (photo or ≤60 s clip) via expo-image-picker. */
+async function takeShot(kind: PostMediaType): Promise<Picked | null> {
+  const res = await ImagePicker.launchCameraAsync({
+    mediaTypes: kind === "image" ? ["images"] : ["videos"],
+    allowsMultipleSelection: false,
+    quality: 0.8,
+    videoMaxDuration: 60,
+  });
+  return toPicked(res);
+}
+
+/** Library pick; `kind` null lets the asset type decide (images + videos). */
+async function pickFromLibrary(kind: PostMediaType | null): Promise<Picked | null> {
+  const res = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: kind === "image" ? ["images"] : kind === "video" ? ["videos"] : ["images", "videos"],
+    allowsMultipleSelection: false,
+    quality: 0.8,
+  });
+  return toPicked(res);
+}
+
 /** Fetch local uri → bytes (works with file://, content://, and web blob:). */
-async function readBytes(uri: string): Promise<Uint8Array> {
+async function readBytes(uri: string): Promise<ArrayBuffer> {
   const res = await fetch(uri);
-  const buf = await res.arrayBuffer();
-  return new Uint8Array(buf);
+  if (!res.ok) throw new ApiError(0, "read_failed", "Could not read the selected media.");
+  return res.arrayBuffer();
+}
+
+/**
+ * PUT the media bytes with real upload progress via XHR (fetch has no upload
+ * progress in RN). RN and web both accept ArrayBuffer bodies.
+ */
+function uploadWithProgress(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: ArrayBuffer,
+  onProgress: (fraction: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    const up = xhr.upload;
+    if (up) {
+      up.addEventListener("progress", (e) => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      });
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new ApiError(xhr.status, "upload_failed", `Upload failed (HTTP ${xhr.status}).`));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "upload_failed", "Upload failed — check your connection."));
+    xhr.send(body);
+  });
 }
 
 type Phase =
   | { name: "idle" }
-  | { name: "uploading"; label: string }
+  | { name: "uploading"; label: string; fraction?: number }
   | { name: "error"; message: string };
 
 interface Props {
@@ -108,10 +156,30 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
     onClose();
   }
 
-  async function choose(kind: PostMediaType): Promise<void> {
+  async function chooseCamera(kind: PostMediaType): Promise<void> {
     setPhase({ name: "idle" });
     try {
-      const p = await pickMedia(kind);
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        setPhase({ name: "error", message: "Camera permission is needed to take a photo or clip." });
+        return;
+      }
+      const p = await takeShot(kind);
+      if (p) setPicked(p);
+    } catch {
+      setPhase({ name: "error", message: "Could not open the camera." });
+    }
+  }
+
+  async function chooseLibrary(kind: PostMediaType | null = null): Promise<void> {
+    setPhase({ name: "idle" });
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setPhase({ name: "error", message: "Photo library permission is needed to pick media." });
+        return;
+      }
+      const p = await pickFromLibrary(kind);
       if (p) setPicked(p);
     } catch {
       setPhase({ name: "error", message: "Could not open the media library." });
@@ -123,9 +191,9 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
     const text = caption.trim().slice(0, MAX_CAPTION);
     try {
       setPhase({ name: "uploading", label: "Reading media…" });
-      const bytes = await readBytes(picked.uri);
+      const body = await readBytes(picked.uri);
       const limit = picked.kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
-      if (bytes.byteLength > limit) {
+      if (body.byteLength > limit) {
         const mb = Math.round(limit / (1024 * 1024));
         setPhase({
           name: "error",
@@ -135,16 +203,26 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
       }
       const ext = extOf(picked.fileName, picked.kind === "image" ? "jpg" : "mp4");
       const contentType = CONTENT_TYPE_BY_EXT[ext] ?? (picked.kind === "image" ? "image/jpeg" : "video/mp4");
-      setPhase({ name: "uploading", label: "Uploading…" });
       const slot = await api.requestUploadUrl({ content_type: contentType, ext, kind: "post" });
-      const put = await fetch(slot.upload.upload_url, {
-        method: slot.upload.method,
-        headers: { ...slot.upload.headers },
-        body: bytes as unknown as BodyInit,
-      });
-      if (!put.ok) {
-        throw new ApiError(put.status, "upload_failed", `Upload failed (HTTP ${put.status}).`);
-      }
+      setPhase({ name: "uploading", label: "Uploading…" });
+      let lastPct = -1;
+      await uploadWithProgress(
+        slot.upload.upload_url,
+        slot.upload.method,
+        slot.upload.headers,
+        body,
+        (frac) => {
+          const pct = Math.floor(frac * 100);
+          if (pct !== lastPct) {
+            lastPct = pct;
+            setPhase((cur) =>
+              cur.name === "uploading"
+                ? { name: "uploading", label: "Uploading…", fraction: frac }
+                : cur,
+            );
+          }
+        },
+      );
       setPhase({ name: "uploading", label: "Posting…" });
       const created = await api.createPost(eventId, {
         type: picked.kind,
@@ -168,6 +246,7 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
   }
 
   const busy = phase.name === "uploading";
+  const pct = phase.name === "uploading" && phase.fraction != null ? Math.floor(phase.fraction * 100) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
@@ -189,21 +268,28 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
                 {picked.duration_s ? <Text style={styles.videoSub}>{picked.duration_s}s clip</Text> : null}
               </View>
             )}
-            <Pressable onPress={() => void choose(picked.kind)} disabled={busy} style={styles.reselect}>
-              <Text style={styles.reselectText}>Choose a different {picked.kind}</Text>
+            <Pressable onPress={() => void chooseLibrary(picked.kind)} disabled={busy} style={styles.reselect}>
+              <Text style={styles.reselectText}>Choose a different {picked.kind} from library</Text>
             </Pressable>
           </>
         ) : (
-          <View style={styles.pickRow}>
-            <Pressable onPress={() => void choose("image")} style={styles.pick} disabled={busy}>
-              <Text style={styles.pickIcon}>📷</Text>
-              <Text style={styles.pickText}>Photo</Text>
-            </Pressable>
-            <Pressable onPress={() => void choose("video")} style={styles.pick} disabled={busy}>
-              <Text style={styles.pickIcon}>🎬</Text>
-              <Text style={styles.pickText}>Video</Text>
-            </Pressable>
-          </View>
+          <>
+            <View style={styles.pickRow}>
+              <Pressable onPress={() => void chooseCamera("image")} disabled={busy} style={styles.pick}>
+                <Text style={styles.pickIcon}>📷</Text>
+                <Text style={styles.pickText}>Photo</Text>
+              </Pressable>
+              <Pressable onPress={() => void chooseCamera("video")} disabled={busy} style={styles.pick}>
+                <Text style={styles.pickIcon}>🎬</Text>
+                <Text style={styles.pickText}>Video</Text>
+              </Pressable>
+              <Pressable onPress={() => void chooseLibrary(null)} disabled={busy} style={styles.pick}>
+                <Text style={styles.pickIcon}>🖼️</Text>
+                <Text style={styles.pickText}>Library</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sourceHint}>Photo or short clip from your camera, or anything from your library.</Text>
+          </>
         )}
         <TextInput
           style={styles.caption}
@@ -222,7 +308,15 @@ export function PostComposerSheet({ visible, eventId, onClose, onPosted }: Props
         {phase.name === "uploading" ? (
           <View style={styles.busyRow}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.busyText}>{phase.label}</Text>
+            <Text style={styles.busyText}>
+              {phase.label}
+              {pct != null ? ` ${pct}%` : ""}
+            </Text>
+          </View>
+        ) : null}
+        {phase.name === "uploading" && phase.fraction != null ? (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.max(2, pct ?? 0)}%` }]} />
           </View>
         ) : null}
         <Pressable
@@ -275,7 +369,7 @@ const styles = StyleSheet.create({
   pickRow: {
     flexDirection: "row",
     gap: spacing.sm,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   pick: {
     flex: 1,
@@ -293,6 +387,11 @@ const styles = StyleSheet.create({
   pickText: {
     color: colors.text,
     fontWeight: "700",
+  },
+  sourceHint: {
+    color: colors.textDim,
+    fontSize: 12,
+    marginBottom: spacing.md,
   },
   preview: {
     width: "100%",
@@ -358,6 +457,18 @@ const styles = StyleSheet.create({
   busyText: {
     color: colors.textDim,
     fontSize: 14,
+  },
+  progressTrack: {
+    marginTop: spacing.sm,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.surfaceAlt,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 2,
+    backgroundColor: colors.primary,
   },
   publish: {
     marginTop: spacing.md,
