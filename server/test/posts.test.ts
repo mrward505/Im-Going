@@ -43,7 +43,7 @@ async function boot(): Promise<void> {
 }
 
 let seq = 0;
-async function newUser(prefix: string): Promise<{ token: string; id: string }> {
+async function newUser(prefix: string): Promise<{ token: string; id: string; username: string }> {
   seq += 1;
   const phone = `+1999${String(1000000 + seq).padStart(7, "0")}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0").slice(0, 3)}${String(Date.now() % 1000).padStart(3, "0")}`.slice(0, 12);
   const req = await jfetch("/api/v1/auth/otp/request", { method: "POST", body: JSON.stringify({ phone }) });
@@ -63,7 +63,7 @@ async function newUser(prefix: string): Promise<{ token: string; id: string }> {
     }),
   });
   if (reg.status !== 201) throw new Error(`register failed: ${JSON.stringify(reg.body)}`);
-  return { token: reg.body.token as string, id: (reg.body.user as Record<string, unknown>).id as string };
+  return { token: reg.body.token as string, id: (reg.body.user as Record<string, unknown>).id as string, username: uname };
 }
 
 async function authz(token: string): Promise<Record<string, string>> {
@@ -377,6 +377,63 @@ describe("slice 4d-1 live: posts, feed, reports, storage", () => {
     });
     expect(nf.status).toBe(404);
     void cid;
+  });
+
+  test("going list: GET /api/v1/events/:id/going — public names + stars, sorted best-first", async () => {
+    if (skip) return;
+    const { getPool } = await import("../src/db/pool");
+    const pool = getPool();
+    const host = await newUser("goinghost");
+    const low = await newUser("goinglow");
+    const high = await newUser("goinghigh");
+    const e = await pool.query<{ id: string }>(
+      `INSERT INTO events (spot_id, start_at, note) VALUES ($1, now() + interval '3 hours', 'goinglist') RETURNING id`,
+      [(await pool.query<{ id: string }>(
+        `INSERT INTO spots (name, address, lat, lon, geofence_radius_m, category, is_verified, city)
+         VALUES ($1, '1 Going Way', 33.42, -111.93, 150, 'bar', true, 'Tempe') RETURNING id`,
+        [`Going List Spot ${Date.now() % 1e7}-${seq}`],
+      )).rows[0].id],
+    );
+    const eventId = e.rows[0].id;
+    await confirm(host.token, eventId); // announces (= confirms)
+    await confirm(low.token, eventId);
+    await confirm(high.token, eventId);
+    // high has a verified check-in elsewhere → above the 3.0★ new-account cap;
+    // low stays fresh-capped at 3.0★. Both list; high sorts first.
+    const boostSpot = await pool.query<{ id: string }>(
+      `INSERT INTO spots (name, address, lat, lon, geofence_radius_m, category, is_verified, city)
+       VALUES ($1, '2 Boost Way', 33.42, -111.93, 150, 'club', true, 'Tempe') RETURNING id`,
+      [`Boost Spot ${Date.now() % 1e7}-${seq}`],
+    );
+    const elsewhere = await pool.query<{ id: string }>(
+      `INSERT INTO events (spot_id, start_at, note) VALUES ($1, now() - interval '10 minutes', 'boost') RETURNING id`,
+      [boostSpot.rows[0].id],
+    );
+    await confirm(high.token, elsewhere.rows[0].id); // check-in requires an active Going
+    const c = await jfetch(`/api/v1/events/${elsewhere.rows[0].id}/checkin`, {
+      method: "POST",
+      headers: await authz(high.token),
+      body: JSON.stringify({ lat: 33.42, lon: -111.93, method: "manual_gps" }),
+    });
+    expect(c.status).toBe(201); // +100 pts → 3.4★ (cap lifted, still above low's 3.0★)
+    const list = await jfetch(`/api/v1/events/${eventId}/going`, {
+      headers: await authz(host.token),
+    });
+    expect(list.status).toBe(200);
+    const going = list.body.going as Record<string, unknown>[];
+    expect((list.body as { count: number }).count).toBe(3);
+    expect(going.length).toBe(3);
+    // best-first: the 3.4★ confirmer leads
+    expect(String((going[0] as { username: string }).username)).toBe(high.username);
+    const me = going.find((g) => (g as { is_me: boolean }).is_me === true);
+    expect(me).toBeDefined();
+    expect(String((me as { username: string }).username)).toBe(host.username);
+    expect(typeof (going[0] as { star_rating: number }).star_rating).toBe("number");
+    // unknown event → 404; malformed id → 404
+    const nf = await jfetch("/api/v1/events/00000000-0000-0000-0000-000000000000/going");
+    expect(nf.status).toBe(404);
+    const bad = await jfetch("/api/v1/events/not-a-uuid/going");
+    expect(bad.status).toBe(404);
   });
 
   test("storage: upload-url requires auth; serve returns 404 for foreign keys", async () => {

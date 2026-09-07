@@ -42,3 +42,4 @@ yarn-error.*
 
 # symlink to shared /tmp install (see memory)
 node_modules
+node_modules.bak/

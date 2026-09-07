@@ -118,6 +118,36 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
   // (free_cancel ≥ 2 h, soft_no_show < 2 h). This file must NOT register the
   // same route twice — checkins.ts owns it.
 
+  // --- who's going (spec §3.4 going list: names + star ratings) --------------
+  // GET /api/v1/events/:id/going — public list of active confirmations,
+  // best (highest-starred, earliest-confirmed) first. `is_me` lets the client
+  // highlight the viewer. Slice 4d-2 surface: the Spot Detail going list.
+  app.get("/api/v1/events/:id/going", async (req) => {
+    const { id } = req.params as { id: string };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw notFound("event not found");
+    }
+    const event = await findEventById(pool, id);
+    if (!event) throw notFound("event not found");
+    const viewerId = req.userClaims?.sub ?? null;
+    const { rows } = await pool.query<{
+      user_id: string; display_name: string; username: string; star_rating: number; is_me: boolean;
+    }>(
+      `SELECT g.user_id, u.display_name, u.username, u.star_rating::float AS star_rating,
+              ($2::uuid IS NOT NULL AND g.user_id = $2) AS is_me
+       FROM going g JOIN users u ON u.id = g.user_id
+       WHERE g.event_id = $1 AND g.status = 'active'
+       ORDER BY u.star_rating DESC, g.created_at ASC
+       LIMIT 100`,
+      [id, viewerId],
+    );
+    return {
+      event_id: id,
+      count: rows.length,
+      going: rows,
+    };
+  });
+
   // --- event detail (custom spot mask unlocks only for confirmers) --------
   app.get("/api/v1/events/:id", async (req) => {
     const { id } = req.params as { id: string };
@@ -163,6 +193,17 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       }
     }
     const confirmed = isCreator || myGoing;
+    // Check-in state for the viewer — drives the "Post to this event" gate
+    // on spot detail (spec §2f: composer reachable only with a verified
+    // check-in) and the check-in button state (§3.4).
+    let myCheckedIn = false;
+    if (next && viewerId) {
+      const c = await pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM checkins WHERE event_id = $1 AND user_id = $2",
+        [next.id, viewerId],
+      );
+      myCheckedIn = (c.rows[0]?.n ?? 0) > 0;
+    }
     return {
       spot: serializeSpotRaw(spot, { confirmed }),
       next_event: next
@@ -170,6 +211,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
         : null,
       going_count: goingCount,
       my_going: myGoing,
+      my_checked_in: myCheckedIn,
     };
   });
 
@@ -241,7 +283,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       share: {
         limit: SHARE_LIMIT_PER_DAY,
         remaining,
-        deep_link: `https://imgoing.io/s/${spot.id}`,
+        deep_link: `https://imgoing.live/s/${spot.id}`,
       },
     });
   });

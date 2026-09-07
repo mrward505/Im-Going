@@ -404,7 +404,7 @@ describe("slice 3 live: check-in + settlement + trending + shares", () => {
     const share = s.body.share as Record<string, unknown>;
     expect(share.limit).toBe(10);
     expect(share.remaining).toBe(10);
-    expect(share.deep_link).toBe(`https://imgoing.io/s/${soon.spotId}`);
+    expect(share.deep_link).toBe(`https://imgoing.live/s/${soon.spotId}`);
     // exhaust the budget via POST /shares → snapshot now 429s (same gate)
     for (let i = 0; i < 10; i++) {
       await jfetch("/api/v1/shares", { method: "POST", headers: h, body: JSON.stringify({}) });
