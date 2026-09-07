@@ -25,6 +25,12 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f8843f5c-b270-4348-85cd-1e20068212f1"
+      }
+    },
+    "owner": "pardonme"
   }
 }
