@@ -133,8 +133,8 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     const { rows } = await pool.query<{
       user_id: string; display_name: string; username: string; star_rating: number; is_me: boolean;
     }>(
-      `SELECT g.user_id, u.display_name, u.username, u.star_rating,
-              g.user_id = $2 AS is_me
+      `SELECT g.user_id, u.display_name, u.username, u.star_rating::float AS star_rating,
+              ($2::uuid IS NOT NULL AND g.user_id = $2) AS is_me
        FROM going g JOIN users u ON u.id = g.user_id
        WHERE g.event_id = $1 AND g.status = 'active'
        ORDER BY u.star_rating DESC, g.created_at ASC
