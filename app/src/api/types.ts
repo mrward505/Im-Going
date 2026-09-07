@@ -96,6 +96,8 @@ export interface EventView {
   window: { start: string; end: string };
   going_count: number;
   my_going: boolean;
+  /** Other active goers on the next event, excluding the viewer (Slice 4d-3a). */
+  going_with_you: number | null;
 }
 
 /** GET /api/v1/trending — top-20 spots with events in the next 48 h. */
@@ -139,6 +141,19 @@ export interface CreateSpotResponse {
   spot: Spot;
 }
 
+/**
+ * Live-audience numbers that ride on spot-detail and share-card payloads
+ * (Slice 4d-3a). All derived from real Going rows, never invented.
+ */
+export interface SpotAudienceSignals {
+  /** Bodies in the event window right now ([start−30m, start+150m]). */
+  going_now: number;
+  /** Raw confirmation velocity: active goings created in the last 60 min. */
+  heat_count: number;
+  /** 0 calm / 1 warming / 2 hot / 3 on_fire bucket from heat_count. */
+  heat_level: 0 | 1 | 2 | 3;
+}
+
 /** GET /api/v1/spots/:id — masked card + next event + going state (slice 4c). */
 export interface SpotDetailResponse {
   spot: Spot;
@@ -153,6 +168,12 @@ export interface SpotDetailResponse {
   my_going: boolean;
   /** Viewer holds a verified check-in on the next event (gates the composer). */
   my_checked_in?: boolean;
+  /** Other active goers on the next event, excluding the viewer. */
+  going_with_you: number | null;
+  /** Live-audience snapshot (Slice 4d-3a). */
+  going_now: number;
+  heat_count: number;
+  heat_level: SpotAudienceSignals["heat_level"];
 }
 /** GET /api/v1/spots/:id/share — share-card snapshot + live share budget (slice 4c). */
 export interface SpotShareResponse {
@@ -165,6 +186,10 @@ export interface SpotShareResponse {
     city: string;
     next_start_at: string | null;
     going_count: number;
+    /** Bodies in the event window right now (Slice 4d-3a). */
+    going_now: number;
+    /** 60-min confirmation velocity buckets 0–3. */
+    heat_level: SpotAudienceSignals["heat_level"];
     creator_display_name: string | null;
   };
   share: {
@@ -248,6 +273,8 @@ export interface MyGoingRow {
   start_at: string;
   settlement_kind: SettlementKind | null;
   settled_at: string | null;
+  /** Other active goers on this event, excluding me (Slice 4d-3a). */
+  going_with_you: number;
   /** ISO instant the free-cancel window closes (start − 2 h, spec §2e). */
   free_cancel_until: string | null;
 }
@@ -255,6 +282,30 @@ export interface MyGoingRow {
 export interface MyGoingResponse {
   upcoming: MyGoingRow[];
   recent: MyGoingRow[];
+}
+
+// --- Slice 4d-3a: influencer pull ---------------------------------------------
+
+/**
+ * GET /api/v1/users/:id/pull & /api/v1/me/pull — real aggregates over the
+ * user's announcements (Slice 4d-3a, "watch the room fill"). All numbers from
+ * real going/events rows; nullable where there is no data yet — the client
+ * must show the honest empty state, never invented numbers.
+ */
+export interface InfluencerPull {
+  /** Events this user announced (events.created_by = user). */
+  announcements_total: number;
+  /** Live audience drawn: active goings on those events, own rows excluded. */
+  confirmations_drawn_total: number;
+  /** Showups ÷ goers with a verdict (0–100, 1 decimal). Null when no verdicts yet. */
+  goers_follow_through_pct: number | null;
+  /** Audience per announcement (2 decimals). Null with no announcements. */
+  avg_confirmations_per_announcement: number | null;
+}
+
+export interface PullResponse {
+  user_id: string;
+  pull: InfluencerPull;
 }
 
 /** POST /api/v1/shares (201) / GET /api/v1/shares/budget */

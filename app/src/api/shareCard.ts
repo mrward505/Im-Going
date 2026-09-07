@@ -1,10 +1,13 @@
 /**
- * Shared share-card helper for "I'm Going" (slice 4d-2): build the one-tap
- * share payload from GET /api/v1/spots/:id/share, open the native share sheet
- * (RN Share API — iOS sheet, Android chooser, web navigator.share/clipboard),
- * and record attribution (POST /api/v1/shares) on success.
+ * Shared share-card helper for "I'm Going" (slice 4d-2, polished in 4d-3b):
+ * build the one-tap share payload from GET /api/v1/spots/:id/share, open the
+ * native share sheet (RN Share API — iOS sheet, Android chooser, web
+ * navigator.share/clipboard), and record attribution (POST /api/v1/shares).
  *
- * Card format (spec §2g): "🍺 I'm going to <spot> — <when>. <N> going. via I'm Going".
+ * The share text is a nightlife share-card in one line (spec §2g + owner
+ * 2026-09-07): dark-gradient card, big type "I'm going — are you? 🎟️", venue,
+ * live going-now + heat badge when the spot is live, and the imgoing link —
+ * real wire numbers only, never invented.
  */
 import { Platform, Share } from "react-native";
 import { api, ApiError } from "./client";
@@ -14,6 +17,13 @@ export interface ShareCardResult {
   status: "shared" | "dismissed" | "copied";
   remaining: number | null;
 }
+
+const HEAT_LABELS: Record<number, string> = {
+  0: "Calm",
+  1: "Warming",
+  2: "Hot",
+  3: "On fire",
+};
 
 /** Render the card text from the share snapshot payload. */
 export function buildShareMessage(
@@ -33,11 +43,14 @@ export function buildShareMessage(
     card.is_verified && card.address
       ? card.address
       : (card.masked_address ?? card.city);
-  const who =
-    card.going_count > 0
-      ? `${card.going_count} going`
-      : "Be the first going";
-  return `🎉 I'm going to ${card.spot_name} — ${when}. ${who}. 📍 ${where}. via I'm Going ${deepLink}`;
+  const heat = card.heat_level != null ? HEAT_LABELS[card.heat_level] ?? "Calm" : null;
+  const live = card.going_now != null && card.going_now > 0
+    ? `· ${card.going_now} going now ${heat ? `· ${heat}` : ""}`
+    : heat && heat !== "Calm"
+      ? ` · ${heat}`
+      : "";
+  const who = card.going_count > 0 ? `${card.going_count} going` : "Be the first going";
+  return `I'm going — are you? 🎟️ → ${card.spot_name} (${when}, ${where}). ${who}${live}. via I'm Going ${deepLink}`;
 }
 
 /**
