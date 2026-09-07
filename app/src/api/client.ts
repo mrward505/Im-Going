@@ -16,6 +16,7 @@ import type {
   CreatePostResponse,
   CreateSpotResponse,
   EventDetailResponse,
+  EventGoingResponse,
   MeResponse,
   ModerationReason,
   MyGoingResponse,
@@ -190,6 +191,9 @@ export const api = {
   },
   confirmGoing(eventId: string): Promise<ConfirmGoingResponse> {
     return request(`/api/v1/events/${eventId}/going`, { method: "POST" });
+  },
+  eventGoing(eventId: string): Promise<EventGoingResponse> {
+    return request(`/api/v1/events/${eventId}/going`);
   },
   cancelGoing(eventId: string): Promise<CancelGoingResponse> {
     return request(`/api/v1/events/${eventId}/going`, { method: "DELETE" });

@@ -151,6 +151,8 @@ export interface SpotDetailResponse {
   } | null;
   going_count: number;
   my_going: boolean;
+  /** Viewer holds a verified check-in on the next event (gates the composer). */
+  my_checked_in?: boolean;
 }
 /** GET /api/v1/spots/:id/share — share-card snapshot + live share budget (slice 4c). */
 export interface SpotShareResponse {
@@ -170,6 +172,21 @@ export interface SpotShareResponse {
     remaining: number | null;
     deep_link: string;
   };
+}
+
+/** GET /api/v1/events/:id/going — who's going (spec §3.4, slice 4d-2). */
+export interface GoingEntry {
+  user_id: string;
+  display_name: string;
+  username: string;
+  star_rating: number;
+  is_me: boolean;
+}
+
+export interface EventGoingResponse {
+  event_id: string;
+  count: number;
+  going: GoingEntry[];
 }
 
 /** POST /api/v1/events (201) — announce */
