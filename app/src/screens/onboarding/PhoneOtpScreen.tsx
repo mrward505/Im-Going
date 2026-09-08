@@ -8,7 +8,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { authApi } from "../../api/client";
 import { ApiError } from "../../api/client";
-import { colors, spacing } from "../../theme";
+import { colors, neon, spacing } from "../../theme";
+import { NightlifeBackdrop } from "../../components/NightlifeBackdrop";
 
 interface Props {
   onVerified: (phone: string, signupToken: string) => void;
@@ -79,6 +80,8 @@ export function PhoneOtpScreen({ onVerified, onBack, onLoggedIn }: Props): React
 
   return (
     <View style={styles.container}>
+      <NightlifeBackdrop />
+      <View style={styles.content}>
       <Pressable onPress={onBack} hitSlop={12}>
         <Text style={styles.back}>← Back</Text>
       </Pressable>
@@ -150,6 +153,7 @@ export function PhoneOtpScreen({ onVerified, onBack, onLoggedIn }: Props): React
 
       {error && <Text style={styles.error}>{error}</Text>}
       {expiry && <Text style={styles.hint}>Code expires {expiry.toLocaleTimeString()}.</Text>}
+      </View>
     </View>
   );
 }
@@ -157,7 +161,10 @@ export function PhoneOtpScreen({ onVerified, onBack, onLoggedIn }: Props): React
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: neon.bgDeep,
+  },
+  content: {
+    flex: 1,
     padding: spacing.xl,
     paddingTop: spacing.xl * 1.5,
   },
@@ -168,8 +175,11 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 26,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
+    textShadowColor: neon.purpleGlow,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
   },
   subtitle: {
     color: colors.textDim,
@@ -178,8 +188,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: "rgba(13, 16, 38, 0.85)",
+    borderColor: neon.purple,
     borderWidth: 1,
     borderRadius: 12,
     color: colors.text,
@@ -188,10 +198,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: neon.pink,
+    borderColor: "#FF7AA5",
+    borderWidth: 1,
     borderRadius: 14,
     paddingVertical: spacing.md,
     alignItems: "center",
+    shadowColor: neon.pink,
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.4,
