@@ -100,13 +100,22 @@ export interface EventView {
   going_with_you: number | null;
 }
 
-/** GET /api/v1/trending — top-20 spots with events in the next 48 h. */
+/** GET /api/v1/trending — top-20 spots with events in the next 48 h.
+ * Slice 4d-3c: each row carries the live-audience snapshot (same real-data
+ * signals as spot detail) so the list can show heat badges — never invented.
+ */
 export interface TrendingResponse {
   trending: Array<{
     spot: Spot;
     next_start_at: string;
     going_count: number;
     trending_score: number;
+    /** Bodies in the event window right now ([start−30m, start+150m]). */
+    going_now: number;
+    /** Raw confirmation velocity: active goings created in the last 60 min. */
+    heat_count: number;
+    /** 0 calm / 1 warming / 2 hot / 3 on_fire bucket from heat_count. */
+    heat_level: SpotAudienceSignals["heat_level"];
   }>;
 }
 

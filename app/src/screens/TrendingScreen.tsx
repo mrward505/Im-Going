@@ -20,6 +20,7 @@ import { api, ApiError } from "../api/client";
 import type { TrendingRow } from "../api/types";
 import { colors, spacing } from "../theme";
 import { AvatarCluster, CategoryPill, RankBadge, formatNextStart } from "../components/hero";
+import { HeatBadge } from "../components/live";
 
 interface Props {
   onAnnounce: () => void;
@@ -55,6 +56,14 @@ function TrendingCard({ row, rank, onOpen }: { row: TrendingRow; rank: number; o
       </View>
       <View style={styles.cardFoot}>
         <AvatarCluster count={row.going_count} />
+        <HeatBadge
+          signals={{
+            going_now: row.going_now ?? 0,
+            heat_level: row.heat_level ?? 0,
+            heat_count: row.heat_count ?? 0,
+          }}
+          size="sm"
+        />
       </View>
     </Pressable>
   );
@@ -206,6 +215,10 @@ const styles = StyleSheet.create({
   },
   cardFoot: {
     marginTop: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
   center: {
     flex: 1,

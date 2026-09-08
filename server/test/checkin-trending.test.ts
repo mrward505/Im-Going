@@ -311,6 +311,15 @@ describe("slice 3 live: check-in + settlement + trending + shares", () => {
     // score math: fresh 3.0★ contribution = 1.0 (no verified check-in → stale ×0.5 → 0.5)
     const row = rows.find((r) => ((r.spot as Record<string, unknown>).id ?? r.spot_id) === soonSpot.rows[0].spot_id);
     expect(Number(row?.trending_score)).toBeCloseTo(0.5, 5);
+    // Slice 4d-3c: live-audience fields ride on each trending row (real data only).
+    // Event starts in +1 h, so its window ([start−30m, +150m]) does not contain
+    // now → going_now 0; the fresh confirm is < 60 min old → heat_count ≥ 1.
+    expect(typeof row?.going_now).toBe("number");
+    expect(typeof row?.heat_count).toBe("number");
+    expect(typeof row?.heat_level).toBe("number");
+    expect(Number(row?.going_now)).toBe(0);
+    expect(Number(row?.heat_count)).toBeGreaterThanOrEqual(1);
+    expect(Number(row?.heat_level)).toBe(0); // 1 confirmation → calm
   });
 
   test("share rate-limit: 10/day, then 429; budget reports remainder", async () => {
