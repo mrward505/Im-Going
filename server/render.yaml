@@ -1,0 +1,27 @@
+# Render Blueprint — I'm Going API (free-tier testing phase).
+# Apply once in the Render dashboard: New → Blueprint → point at this repo.
+# Repo layout note: the API lives in server/, so dockerContext is ./server.
+services:
+  - type: web
+    name: imgoing-api
+    runtime: docker
+    plan: free
+    dockerContext: ./server
+    healthCheckPath: /health
+    autoDeploy: true
+    branch: main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Neon free Postgres connection string (set in dashboard)
+      - key: AUTH_JWT_SECRET
+        sync: false # generate: openssl rand -hex 32 (set in dashboard)
+      - key: ADMIN_TOKEN
+        sync: false # generate: openssl rand -hex 32 (set in dashboard)
+      - key: OTP_PROVIDER
+        value: console # dev-style OTP in logs for the small test beta; Twilio later
+      - key: LAUNCH_CITY
+        value: Tempe
+      - key: LOG_LEVEL
+        value: info

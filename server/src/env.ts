@@ -75,8 +75,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 
   const cfg: Config = {
     DATABASE_URL,
-    PORT: intOr(get("PORT"), 8081), // 8080 is reserved on the team dev box by an unrelated local service
-    HOST: get("HOST") ?? "127.0.0.1",
+    // Render (and most container hosts) inject $PORT at runtime; default 8081
+    // matches local dev (8080 is reserved on the team dev box).
+    PORT: intOr(get("PORT"), 8081),
+    // Local dev stays loopback-only. In production (NODE_ENV=production) an
+    // explicit HOST still wins, but the default opens 0.0.0.0 so the container
+    // accepts traffic from the host's router (Render requires this).
+    HOST: get("HOST") ?? (get("NODE_ENV") === "production" ? "0.0.0.0" : "127.0.0.1"),
     LOG_LEVEL: get("LOG_LEVEL") ?? "info",
     OTP_PROVIDER: (get("OTP_PROVIDER") ?? "console") === "twilio" ? "twilio" : "console",
     TWILIO_ACCOUNT_SID: get("TWILIO_ACCOUNT_SID"),
