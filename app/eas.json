@@ -16,7 +16,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "distribution": "store"
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://imgoing-api.onrender.com"
+      }
     }
   },
   "submit": {
