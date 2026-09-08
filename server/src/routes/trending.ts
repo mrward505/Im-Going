@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../db/pool";
 import { spotTrending, TRENDING_LIMIT } from "../lib/trending";
+import { spotAudience } from "../lib/audience";
 import { serializeSpotRaw, findSpotById } from "../db";
 import { SHARE_LIMIT_PER_DAY, consumeShare, shareBudgetRemaining } from "../lib/limits";
 
@@ -10,6 +11,11 @@ import { SHARE_LIMIT_PER_DAY, consumeShare, shareBudgetRemaining } from "../lib/
  * (spec §2c). Scores come from src/lib/trending.ts (shared with unit tests);
  * this route wires it to HTTP and attaches spot cards with the custom-spot
  * masking rule (§2b: private spots mask address/pin until the viewer confirms).
+ *
+ * Slice 4d-3c: each row also carries the live-audience snapshot (going_now,
+ * heat_count, heat_level) from lib/audience.ts — the same real-data signals
+ * spot detail + share payloads carry, so the Trending list can show heat
+ * badges with no invented numbers. Additive only (no fields removed).
  */
 export async function registerTrendingRoutes(app: FastifyInstance): Promise<void> {
   const pool = getPool();
@@ -33,6 +39,7 @@ export async function registerTrendingRoutes(app: FastifyInstance): Promise<void
         next_start_at: r.next_start_at,
         going_count: r.going_count,
         trending_score: r.trending_score,
+        ...(await spotAudience(pool, r.spot_id)),
       };
     }));
     return { trending: spots };
