@@ -1,0 +1,9 @@
+# Never bake secrets or local state into the image.
+.env
+.env.*.local
+node_modules/
+data/uploads/
+*.log
+.run/
+.DS_Store
+.git/
