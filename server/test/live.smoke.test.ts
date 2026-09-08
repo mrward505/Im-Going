@@ -32,6 +32,11 @@ async function jfetch(path: string, init: RequestInit = {}): Promise<{ status: n
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
+async function mintOne(): Promise<unknown> {
+  const mint = await jfetch("/api/v1/admin/invites/mint", { method: "POST", body: JSON.stringify({ count: 1, label: "test" }) });
+  if (mint.status !== 201) throw new Error(`invite mint failed: ${JSON.stringify(mint.body)}`);
+  return (mint.body.codes as { code: string }[])[0].code;
+}
 // We boot directly (buildApp) so the test can pass HERE, live, without a
 // separately-running server — but only when LIVE=1 the whole fixture path runs.
 let app: FastifyInstance | undefined;
@@ -72,12 +77,14 @@ describe("live API against real Postgres", () => {
     expect(ver.status).toBe(200);
     expect(ver.body.type).toBe("signup");
     const signupToken = ver.body.signup_token as string;
-    // 3. register (18+)
+    // 3. register (18+; invite code required — mint one first)
     const dob = "2001-06-15";
     const uname = `u${Math.floor(Math.random() * 1e9).toString(36)}`;
+    const mint = await jfetch("/api/v1/admin/invites/mint", { method: "POST", body: JSON.stringify({ count: 1, label: "test" }) });
+    expect(mint.status).toBe(201);
     const reg = await jfetch("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ signup_token: signupToken, display_name: "Test User", username: uname, dob }),
+      body: JSON.stringify({ signup_token: signupToken, display_name: "Test User", username: uname, dob, invite_code: (mint.body.codes as { code: string }[])[0].code }),
     });
     expect(reg.status).toBe(201);
     const sessionToken = reg.body.token as string;
@@ -95,7 +102,7 @@ describe("live API against real Postgres", () => {
     const ver = await jfetch("/api/v1/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code: req.body.dev_code as string }) });
     const reg = await jfetch("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ signup_token: ver.body.signup_token, display_name: "Kid", username: "kid1", dob: "2015-01-01" }),
+      body: JSON.stringify({ signup_token: ver.body.signup_token, display_name: "Kid", username: `kid${Math.floor(Math.random() * 1e9).toString(36)}`, dob: "2015-01-01", invite_code: "whatever" }),
     });
     expect(reg.status).toBe(403);
   });
@@ -108,7 +115,7 @@ describe("live API against real Postgres", () => {
     const verA = await jfetch("/api/v1/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone: phoneA, code: reqA.body.dev_code }) });
     const regA = await jfetch("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ signup_token: verA.body.signup_token, display_name: "Announcer", username: "annc1", dob: "2000-01-01" }),
+      body: JSON.stringify({ signup_token: verA.body.signup_token, display_name: "Announcer", username: `annc${Math.floor(Math.random() * 1e9).toString(36)}`, dob: "2000-01-01", invite_code: (await mintOne()) as string }),
     });
     const tokenA = regA.body.token as string;
     const spot = await jfetch("/api/v1/spots", {
@@ -138,7 +145,7 @@ describe("live API against real Postgres", () => {
     const ver = await jfetch("/api/v1/auth/otp/verify", { method: "POST", body: JSON.stringify({ phone, code: req.body.dev_code }) });
     const reg = await jfetch("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ signup_token: ver.body.signup_token, display_name: "Eventi", username: "evt1", dob: "1999-01-01" }),
+      body: JSON.stringify({ signup_token: ver.body.signup_token, display_name: "Eventi", username: `evt${Math.floor(Math.random() * 1e9).toString(36)}`, dob: "1999-01-01", invite_code: (await mintOne()) as string }),
     });
     const token = reg.body.token as string;
     // find the seeded verified spot

@@ -55,6 +55,9 @@ async function newUser(prefix: string): Promise<{ token: string; id: string }> {
     body: JSON.stringify({ phone, code: req.body.dev_code as string }),
   });
   const uname = `${prefix}${seq}${Math.floor(Math.random() * 1e6).toString(36)}`.slice(0, 18);
+  const mint = await jfetch("/api/v1/admin/invites/mint", { method: "POST", body: JSON.stringify({ count: 1, label: "test" }) });
+  if (mint.status !== 201) throw new Error(`invite mint failed: ${JSON.stringify(mint.body)}`);
+  const inviteCode = (mint.body.codes as { code: string }[])[0].code;
   const reg = await jfetch("/api/v1/auth/register", {
     method: "POST",
     body: JSON.stringify({
@@ -62,6 +65,7 @@ async function newUser(prefix: string): Promise<{ token: string; id: string }> {
       display_name: `${prefix} ${seq}`,
       username: uname,
       dob: "2000-01-01",
+      invite_code: inviteCode,
     }),
   });
   if (reg.status !== 201) throw new Error(`register failed: ${JSON.stringify(reg.body)}`);

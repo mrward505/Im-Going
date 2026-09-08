@@ -107,6 +107,7 @@ export const authApi = {
     display_name: string;
     username: string;
     dob: string; // YYYY-MM-DD
+    invite_code: string; // Tempe launch gate: required for new users
   }): Promise<RegisterResponse> {
     const res = await request<RegisterResponse>("/api/v1/auth/register", {
       method: "POST",

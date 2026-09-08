@@ -12,6 +12,7 @@ import { registerVenueRoutes } from "./routes/venues";
 import { registerEventRoutes } from "./routes/events";
 import { registerCheckinRoutes } from "./routes/checkins";
 import { registerPostRoutes } from "./routes/posts";
+import { registerInviteRoutes } from "./routes/invites";
 import { registerTrendingRoutes, registerShareRoutes } from "./routes/trending";
 import { toApiError } from "./lib/errors";
 import { setServerAddress } from "./lib/storage";
@@ -111,6 +112,7 @@ export async function buildApp() {
   await registerEventRoutes(app);
   await registerCheckinRoutes(app);
   await registerPostRoutes(app);
+  await registerInviteRoutes(app);
   await registerTrendingRoutes(app);
   await registerShareRoutes(app);
 

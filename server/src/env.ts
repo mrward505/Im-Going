@@ -49,6 +49,7 @@ export interface Config {
   STORAGE_BUCKET?: string;
   STORAGE_LOCAL_DIR?: string;
   LAUNCH_CITY: string;
+  ADMIN_TOKEN?: string;
 }
 
 function intOr(value: string | undefined, fallback: number): number {
@@ -90,6 +91,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     STORAGE_BUCKET: get("STORAGE_BUCKET"),
     STORAGE_LOCAL_DIR: get("STORAGE_LOCAL_DIR") ?? "./data/uploads",
     LAUNCH_CITY: get("LAUNCH_CITY") ?? "Tempe",
+    ADMIN_TOKEN: get("ADMIN_TOKEN"),
   };
 
   if (cfg.OTP_PROVIDER === "twilio") {

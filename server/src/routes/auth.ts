@@ -5,7 +5,8 @@ import { findUserByPhone, findUserById, serializeUser } from "../db";
 import { issueOtpCode, verifyOtpCode, otpExpiry, isOtpExpired } from "../lib/otp";
 import { smsProviderFromConfig } from "../lib/sms";
 import { mintSessionToken, mintSignupToken, verifyToken } from "../lib/tokens";
-import { ApiError, badRequest, unauthorized, forbidden } from "../lib/errors";
+import { ApiError, badRequest, unauthorized, forbidden, conflict } from "../lib/errors";
+import { normalizeInviteCode } from "../lib/invites";
 import { getConfig } from "../env";
 import type { SafeUserClaims } from "../lib/tokens";
 // Validate body/params with zod in handlers; Fastify schema options must NOT
@@ -29,6 +30,9 @@ const registerSchema = z.object({
   display_name: z.string().min(1).max(60),
   username: z.string().regex(/^[a-z0-9_]{3,20}$/),
   dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dob must be YYYY-MM-DD").refine((s) => !Number.isNaN(Date.parse(s)), "invalid date"),
+  // Tempe launch gate (owner decision 2026-09-06): new users join only via an
+  // invite code. Case-insensitive on the wire; normalized server-side.
+  invite_code: z.string().trim().min(4).max(16),
 });
 
 const MAX_AGE_YEARS = 100;
@@ -132,9 +136,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // --- complete signup (18+ gate, name + username + DOB) ------------------
+  // --- complete signup (18+ gate, name + username + DOB, invite code) ----
   app.post("/api/v1/auth/register", async (req, reply) => {
-    const { signup_token, display_name, username, dob } = registerSchema.parse(req.body);
+    const { signup_token, display_name, username, dob, invite_code } = registerSchema.parse(req.body);
     const claims = await verifyToken<SafeUserClaims>(signup_token);
     if (claims.typ !== "signup" || !claims.phone || !claims.otp_request_id) {
       throw unauthorized("invalid signup token");
@@ -149,18 +153,62 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     if ((otpRow.rowCount ?? 0) === 0) throw unauthorized("signup token does not match a verified phone");
 
     const city = getConfig().LAUNCH_CITY;
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO users (phone, dob, display_name, username, city, reputation_points, star_rating)
-       VALUES ($1, $2, $3, $4, $5, 500, 3.0)
-       RETURNING id`,
-      [claims.phone, dob, display_name, username, city],
-    );
-    const user = await findUserById(pool, rows[0].id);
-    if (!user) throw new Error("user vanished after insert");
-    return reply.code(201).send({
-      token: await mintSessionToken({ sub: user.id, phone: user.phone }),
-      user: serializeUser(user),
-    });
+    const code = normalizeInviteCode(invite_code);
+
+    // Atomic redeem: user insert + code spend + redemption row in one
+    // transaction. The consume is conditional (used_count < max_uses), so a
+    // concurrent double-redeem of the last use fails cleanly with 409.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const codeRow = await client.query<{ id: string; max_uses: number; used_count: number }>(
+        "SELECT id, max_uses, used_count FROM invite_codes WHERE code = $1 FOR UPDATE",
+        [code],
+      );
+      const invite = codeRow.rows[0];
+      if (!invite) {
+        await client.query("ROLLBACK");
+        throw badRequest("that invite code doesn't look right — check it and try again");
+      }
+      if (invite.used_count >= invite.max_uses) {
+        await client.query("ROLLBACK");
+        throw conflict("that invite code has already been used");
+      }
+      const userRes = await client.query<{ id: string }>(
+        `INSERT INTO users (phone, dob, display_name, username, city, reputation_points, star_rating, invite_code_id)
+         VALUES ($1, $2, $3, $4, $5, 500, 3.0, $6)
+         RETURNING id`,
+        [claims.phone, dob, display_name, username, city, invite.id],
+      );
+      const userId = userRes.rows[0].id;
+      const spend = await client.query(
+        "UPDATE invite_codes SET used_count = used_count + 1 WHERE id = $1 AND used_count < max_uses",
+        [invite.id],
+      );
+      if ((spend.rowCount ?? 0) === 0) {
+        await client.query("ROLLBACK");
+        throw conflict("that invite code has already been used");
+      }
+      await client.query("INSERT INTO invite_redemptions (code_id, user_id) VALUES ($1, $2)", [invite.id, userId]);
+      await client.query("COMMIT");
+      const user = await findUserById(pool, userId);
+      if (!user) throw new Error("user vanished after insert");
+      return reply.code(201).send({
+        token: await mintSessionToken({ sub: user.id, phone: user.phone }),
+        user: serializeUser(user),
+      });
+    } catch (err) {
+      // A duplicate phone/username racing through still surfaces as 409 via
+      // the shared pg-error mapping; make sure we never leak an open txn.
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // already rolled back / committed — the real error below is what matters
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 
   // --- who am I -----------------------------------------------------------
