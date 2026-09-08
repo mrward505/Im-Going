@@ -9,7 +9,8 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "io.imgoing.app"
+      "bundleIdentifier": "io.imgoing.app",
+      "buildNumber": "3"
     },
     "android": {
       "adaptiveIcon": {
