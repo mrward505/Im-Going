@@ -17,6 +17,21 @@ export const colors = {
   card: "#171A21",
 } as const;
 
+/**
+ * Nightlife accent family for the alive/onboarding polish (owner direction
+ * 2026-09-07). Additive only — existing tokens above are untouched.
+ */
+export const neon = {
+  bgDeep: "#07080D", // near-black navy base
+  bgNavy: "#0D1026", // deep navy wash
+  pink: "#FF3D7F", // hot pink — primary neon
+  purple: "#8B5CFF", // electric purple
+  cyan: "#3DE8FF", // cyan spark
+  pinkGlow: "rgba(255, 61, 127, 0.45)",
+  purpleGlow: "rgba(139, 92, 255, 0.4)",
+  cyanGlow: "rgba(61, 232, 255, 0.28)",
+} as const;
+
 export const spacing = {
   xs: 4,
   sm: 8,
