@@ -49,6 +49,7 @@ export function ProfileStepScreen({
   const [username, setUsername] = useState("");
   const [dob, setDob] = useState<Date | null>(null);
   const [dobText, setDobText] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +62,8 @@ export function ProfileStepScreen({
 
   const under18 = dobParsed !== null && ageYears(dobParsed) < 18;
   const usernameOk = /^[a-z0-9_]{3,20}$/.test(username);
-  const canSubmit = displayName.trim().length >= 1 && usernameOk && dobParsed !== null && !under18;
+  const inviteOk = inviteCode.trim().length >= 4;
+  const canSubmit = displayName.trim().length >= 1 && usernameOk && dobParsed !== null && !under18 && inviteOk;
 
   async function submit(): Promise<void> {
     if (!canSubmit || !dobParsed) return;
@@ -78,6 +80,7 @@ export function ProfileStepScreen({
         display_name: displayName.trim(),
         username: username.trim().toLowerCase(),
         dob: toIso(dobParsed),
+        invite_code: inviteCode.trim(),
       });
       onRegistered(res.token);
     } catch (e) {
@@ -143,6 +146,19 @@ export function ProfileStepScreen({
       {under18 ? (
         <Text style={styles.underage}>I&apos;m Going is 18+ — you&apos;re not old enough yet.</Text>
       ) : null}
+
+      <Text style={styles.label}>Invite code</Text>
+      <Text style={styles.inviteHint}>I&apos;m Going is invite-only in Tempe right now — enter the code you got.</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. TEMPE-2026"
+        placeholderTextColor={colors.textDim}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        value={inviteCode}
+        onChangeText={(t) => setInviteCode(t.toUpperCase())}
+        maxLength={16}
+      />
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -239,6 +255,11 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 12,
     marginTop: spacing.xs,
+  },
+  inviteHint: {
+    color: colors.textDim,
+    fontSize: 12,
+    marginBottom: spacing.xs,
   },
   cancelWrap: {
     marginTop: spacing.md,
