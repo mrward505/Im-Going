@@ -13,9 +13,17 @@
  *   addresses, or coordinates;
  * - city is set from the record (address city/town/village when it names one
  *   of the 7 metro cities, else the harvest file's city) — no default leakage;
- * - coords must fall inside one of the 7 metro bboxes or the record is dropped;
- * - unnamed records, pure address interpolations and administrative boundaries
- *   are dropped; node/way dupes collapse via canonical-name + ~55 m grid key.
+ * - coords must land inside the metro outer bounds (union of the 7 city
+ *   bboxes) ±0.02° or the record is dropped; anything in/near the metro area
+ *   survives even if it falls in a seam between two city bboxes;
+ * - only place-like POIs are kept (amenity/leisure/tourism/shop/historic/
+ *   sport/craft/office/healthcare/etc. objects). Pure address rows
+ *   (addresstype=street), highway/boundary/place/building/landuse/natural/
+ *   waterway/railway/aeroway/barrier/power/military objects and anything
+ *   tagged disused/abandoned/construction/planned/proposed are dropped;
+ * - unnamed records are dropped; node/way dupes collapse via
+ *   canonical-name + ~55 m grid key, metro-wide (not per-city); on a
+ *   collision the row with the most complete address wins.
  *
  * Usage:
  *   bun server/seed/gen-from-nominatim.ts   # reads /tmp/pois, writes the module
@@ -47,6 +55,14 @@ const BBOX: Record<string, [number, number, number, number]> = {
   Glendale: [33.5077852, 33.6979238, -112.4615632, -112.1515638],
 };
 
+// Metro outer bounds = union of the 7 city bboxes, padded by 0.02° so seams
+// between city boxes (and border suburbs within the metro region) are not
+// discarded. Genuine sanity bound for "is this in the Phoenix metro at all?".
+const METRO_LAT_S = Math.min(...Object.values(BBOX).map((b) => b[0])) - 0.02;
+const METRO_LAT_N = Math.max(...Object.values(BBOX).map((b) => b[1])) + 0.02;
+const METRO_LON_W = Math.min(...Object.values(BBOX).map((b) => b[2])) - 0.02;
+const METRO_LON_E = Math.max(...Object.values(BBOX).map((b) => b[3])) + 0.02;
+
 type Cat = "bar" | "club" | "concert" | "restaurant" | "house" | "other";
 
 interface NomiRec {
@@ -58,7 +74,9 @@ interface NomiRec {
   addresstype?: string;
   osm_type?: string;
   osm_id?: number;
+  place_rank?: number;
   address?: Record<string, string>;
+  extratags?: Record<string, string>;
   display_name?: string;
 }
 
@@ -74,6 +92,32 @@ function canonicalName(name: string): string {
 
 function gridKey(lat: number, lon: number): string {
   return `${Math.round(lat * 800)}:${Math.round(lon * 800)}`; // ~55 m cells
+}
+
+// Object classes that are NOT visitable POIs for a nightlife app — pure
+// address rows, transport/geography/buildings/neighbourhoods, and anything
+// in a non-operating lifecycle state. Everything else (amenity, leisure,
+// tourism, shop, historic, sport, craft, office, healthcare, ...) is kept —
+// deliberately NOT a tiny whitelist, so genuinely place-like records survive.
+const NON_POI_CATEGORIES = new Set([
+  "highway", "boundary", "place", "building", "landuse", "natural",
+  "waterway", "railway", "aeroway", "barrier", "power", "military",
+  "man_made", "emergency", "route", "water", "tunnel", "bridge", "mountain_pass",
+]);
+const LIFECYCLE_RE = /(^|_)(disused|abandoned|construction|planned|proposed|demolished|removed|razed)(_|$)/;
+
+function isNonPoi(r: NomiRec): boolean {
+  if (r.addresstype === "street") return true;
+  const cat = r.category ?? "";
+  if (NON_POI_CATEGORIES.has(cat)) return true;
+  if (cat === "place" || cat === "building") return true;
+  // extratags may carry lifecycle states (e.g. disused:amenity=bar → the
+  // category is still "amenity" but the venue is not operating).
+  const et = r.extratags ?? {};
+  for (const [k, v] of Object.entries(et)) {
+    if (LIFECYCLE_RE.test(k) || LIFECYCLE_RE.test(v)) return true;
+  }
+  return false;
 }
 
 /** Map Nominatim (category:type) to the spec enum. Query-hint fallback second. */
@@ -107,13 +151,13 @@ function recordCity(r: NomiRec, fileCity: string): string | null {
   const hit = METRO_CITIES.find((c) => c.toLowerCase() === named.toLowerCase());
   if (hit) return hit;
   // County-level or unincorporated records still belong to the harvest city
-  // as long as coords land inside its bbox (checked by the caller).
+  // (the query was "<q> in <city>"); coords sanity is checked by the caller.
   if (METRO_CITIES.includes(fileCity as (typeof METRO_CITIES)[number])) return fileCity;
   return null;
 }
 
-function insideAnyBbox(lat: number, lon: number): boolean {
-  return Object.values(BBOX).some(([s, n, w, e]) => lat >= s && lat <= n && lon >= w && lon <= e);
+function insideMetro(lat: number, lon: number): boolean {
+  return lat >= METRO_LAT_S && lat <= METRO_LAT_N && lon >= METRO_LON_W && lon <= METRO_LON_E;
 }
 
 export interface MetroSeedVenue {
@@ -130,8 +174,9 @@ export interface MetroSeedVenue {
 export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]; dropped: Record<string, number> } {
   const dropped: Record<string, number> = {};
   const drop = (why: string) => { dropped[why] = (dropped[why] ?? 0) + 1; };
-  const seen = new Set<string>();
-  const out: MetroSeedVenue[] = [];
+  // metro-wide dedup: canonical-name + ~55 m grid cell => best row wins
+  const best = new Map<string, { v: MetroSeedVenue; addrLen: number }>();
+  let rawSeen = 0;
 
   let files: string[];
   try {
@@ -147,28 +192,24 @@ export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]
     let recs: NomiRec[];
     try {
       recs = JSON.parse(readFileSync(join(poisDir, f), "utf8")) as NomiRec[];
+      if (!Array.isArray(recs)) { drop("bad_file_shape"); continue; }
     } catch {
       drop("unparseable"); continue;
     }
     for (const r of recs) {
+      rawSeen++;
       const name = (r.name ?? "").trim();
       if (!name) { drop("unnamed"); continue; }
-      // Nominatim sometimes returns streets/buildings for amenity-flavoured
-      // queries — only real visitable POIs count.
-      if (r.addresstype === "street" || r.category === "highway" || r.category === "boundary" || r.category === "place") {
-        drop("not_a_poi"); continue;
-      }
+      if (isNonPoi(r)) { drop("not_a_poi"); continue; }
       const lat = parseFloat(r.lat);
       const lon = parseFloat(r.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) { drop("bad_coords"); continue; }
-      if (!insideAnyBbox(lat, lon)) { drop("outside_metro"); continue; }
+      if ((lat === 0 && lon === 0) || !insideMetro(lat, lon)) { drop("outside_metro"); continue; }
       const city = recordCity(r, fileCity);
       if (!city) { drop("unknown_city"); continue; }
-      if (city === "Tempe") continue; // Tempe anchor keeps its Overpass file
+      if (city === "Tempe") { drop("tempe_excluded"); continue; } // Tempe anchor keeps its Overpass file
       const key = `${canonicalName(name)}|${gridKey(lat, lon)}`;
-      if (seen.has(key)) { drop("dupe"); continue; }
-      seen.add(key);
-      out.push({
+      const candidate: MetroSeedVenue = {
         name,
         address: buildAddress(r.address, city),
         lat: Math.round(lat * 1e6) / 1e6,
@@ -177,11 +218,26 @@ export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]
         is_large_venue: /stadium|arena|amphitheatre/.test(`${r.category}:${r.type}`),
         city,
         osm: `${r.osm_type ?? "?"}/${r.osm_id ?? "?"}`,
-      });
+      };
+      const prev = best.get(key);
+      if (!prev) { best.set(key, { v: candidate, addrLen: candidate.address?.length ?? 0 }); continue; }
+      // Same venue found again (across query files/cities): keep the row with
+      // the most complete address; ties keep the first (osmA ref stable).
+      const addrLen = candidate.address?.length ?? 0;
+      if (addrLen > prev.addrLen) {
+        best.set(key, { v: candidate, addrLen });
+        drop("dupe_better_address");
+      } else {
+        drop("dupe");
+      }
     }
   }
-  out.sort((a, b) => a.city.localeCompare(b.city) || a.name.localeCompare(b.name));
-  return { venues: out, dropped };
+  const venues = [...best.values()].map((e) => e.v);
+  venues.sort((a, b) => a.city.localeCompare(b.city) || a.name.localeCompare(b.name));
+  if (process.argv[1]?.includes("gen-from-nominatim")) {
+    console.log(`audit: raw_seen=${rawSeen} files=${files.length} kept=${venues.length}`);
+  }
+  return { venues, dropped };
 }
 
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "§");
