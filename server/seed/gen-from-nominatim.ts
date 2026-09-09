@@ -4,6 +4,7 @@
  * server/src/data/metro-venues.ts.
  *
  * Input:  /tmp/pois/<City>__<query>.json  (Nominatim jsonv2, addressdetails=1)
+ *         /tmp/pois2/<City>__<query>__p2.json (page 2 of queries capped at 50)
  * Output: server/src/data/metro-venues.ts (METRO_VENUES, Tempe excluded —
  *         Tempe keeps its Overpass-built file as the anchor).
  *
@@ -181,12 +182,21 @@ export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]
   let files: string[];
   try {
     files = readdirSync(poisDir).filter((f) => f.endsWith(".json")).sort();
+    // Optional page-2 dir (e.g. /tmp/pois2): same input format, filename
+    // suffix "__p2" marks the second page of a 50-record query. Records in
+    // both pages are merged by the same metro-wide dedup.
+    const dir2 = poisDir.replace(/\/?$/, "2");
+    try {
+      const files2 = readdirSync(dir2).filter((f) => f.endsWith(".json"));
+      for (const f of files2) if (!files.includes(f)) files.push(f);
+      files.sort();
+    } catch { /* no page-2 dir — fine */ }
   } catch {
     return { venues: [], dropped: { no_pois_dir: 1 } };
   }
 
   for (const f of files) {
-    const m = f.match(/^([A-Za-z]+)__(.+)\.json$/);
+    const m = f.match(/^([A-Za-z]+)__(.+?)(?:__p[0-9]+)?\.json$/);
     if (!m) { drop("bad_filename"); continue; }
     const [, fileCity, queryHint] = m;
     let recs: NomiRec[];
