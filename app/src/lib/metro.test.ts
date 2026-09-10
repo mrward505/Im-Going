@@ -23,8 +23,10 @@ describe("project / unproject", () => {
 
   test("all 7 real city anchors project inside the unit square", () => {
     for (const city of Object.keys(METRO_CITY_ANCHORS)) {
-      const { lat, lon } = METRO_CITY_ANCHORS[city];
-      const p = project(lat, lon);
+      // Static constant anchors — the lookup is safe (noUncheckedIndexedAccess guard).
+      const anchor = METRO_CITY_ANCHORS[city];
+      if (!anchor) throw new Error(`missing anchor for ${city}`);
+      const p = project(anchor.lat, anchor.lon);
       expect(p.x).toBeGreaterThanOrEqual(0);
       expect(p.x).toBeLessThanOrEqual(1);
       expect(p.y).toBeGreaterThanOrEqual(0);
@@ -33,10 +35,11 @@ describe("project / unproject", () => {
   });
 
   test("city relative layout matches reality (Glendale west, Mesa east, Chandler south)", () => {
-    const glendale = project(METRO_CITY_ANCHORS.Glendale.lat, METRO_CITY_ANCHORS.Glendale.lon);
-    const mesa = project(METRO_CITY_ANCHORS.Mesa.lat, METRO_CITY_ANCHORS.Mesa.lon);
-    const chandler = project(METRO_CITY_ANCHORS.Chandler.lat, METRO_CITY_ANCHORS.Chandler.lon);
-    const scottsdale = project(METRO_CITY_ANCHORS.Scottsdale.lat, METRO_CITY_ANCHORS.Scottsdale.lon);
+    // Static constant anchors — safe to assert (noUncheckedIndexedAccess guard).
+    const glendale = project(METRO_CITY_ANCHORS.Glendale!.lat, METRO_CITY_ANCHORS.Glendale!.lon);
+    const mesa = project(METRO_CITY_ANCHORS.Mesa!.lat, METRO_CITY_ANCHORS.Mesa!.lon);
+    const chandler = project(METRO_CITY_ANCHORS.Chandler!.lat, METRO_CITY_ANCHORS.Chandler!.lon);
+    const scottsdale = project(METRO_CITY_ANCHORS.Scottsdale!.lat, METRO_CITY_ANCHORS.Scottsdale!.lon);
     expect(glendale.x).toBeLessThan(mesa.x);
     expect(chandler.y).toBeGreaterThan(scottsdale.y); // smaller y = more north
     expect(METRO_BOUNDS.latMin).toBeLessThan(METRO_BOUNDS.latMax);
@@ -65,7 +68,7 @@ describe("pinRadius", () => {
 
 describe("distanceM / formatDistanceM", () => {
   test("Tempe–Phoenix downtown is roughly 10–20 km apart", () => {
-    const d = distanceM(METRO_CITY_ANCHORS.Tempe, METRO_CITY_ANCHORS.Phoenix);
+    const d = distanceM(METRO_CITY_ANCHORS.Tempe!, METRO_CITY_ANCHORS.Phoenix!);
     expect(d).toBeGreaterThan(10_000);
     expect(d).toBeLessThan(20_000);
   });
