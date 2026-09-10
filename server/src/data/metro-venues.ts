@@ -1,5 +1,5 @@
 /**
- * Phoenix-metro venue seed (excl. Tempe anchor) — 1829 REAL places
+ * Phoenix-metro venue seed (excl. Tempe anchor) — 1837 REAL places
  * compiled from OpenStreetMap via Nominatim (ODbL license; see
  * server/seed/README.md for the pipeline).
  *
@@ -1064,7 +1064,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Bowtie Bar & Grill", address: null, lat: 33.435242, lon: -112.009468, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/3081245306" },
   { name: "Brazell Stadium", address: null, lat: 33.512323, lon: -112.132714, category: "concert", is_large_venue: true, city: "Phoenix", osm: "way/980377325" },
   { name: "Breakfast Club", address: null, lat: 33.44761, lon: -112.073155, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/2469618301" },
-  { name: "Budget Lodge of Phoenix", address: "8617 Black Canyon Freeway, Phoenix, AZ 85021", lat: 33.563402, lon: -112.115212, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/1354280892" },
+  { name: "Budget Lodge of Phoenix", address: "8617 North Black Canyon Highway, Phoenix, AZ 85021", lat: 33.563402, lon: -112.115212, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/1354280892" },
   { name: "Buffalo Wild Wings", address: "2700 West North Lane, Phoenix, AZ 85051", lat: 33.580634, lon: -112.118106, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/617087841" },
   { name: "Bull Shooters", address: "3337 West Peoria Avenue, Phoenix, AZ 85029", lat: 33.580691, lon: -112.132775, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/7160194497" },
   { name: "Burger King", address: "2755 West Peoria Avenue, Phoenix, AZ 85029", lat: 33.581513, lon: -112.120716, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/236668573" },
@@ -1140,6 +1140,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Dunkin'", address: "102 North Central Avenue, Phoenix, AZ 85004", lat: 33.449476, lon: -112.074046, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/6365453470" },
   { name: "Dunkin'", address: "3137 East Cactus Road, Phoenix, AZ 85028", lat: 33.596525, lon: -112.014213, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/62262654" },
   { name: "Dust Cutter", address: "50 East Adams Street, Phoenix, AZ 85004", lat: 33.449514, lon: -112.073028, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/10019668496" },
+  { name: "Dutch Bros. Coffee", address: "12629 North Paradise Village Parkway West, Phoenix, AZ 85032", lat: 33.602159, lon: -111.988136, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/669785735" },
   { name: "East Lawn", address: null, lat: 33.507207, lon: -111.949157, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/182106428" },
   { name: "Eastlake Amphitheatre", address: null, lat: 33.446219, lon: -112.049208, category: "concert", is_large_venue: false, city: "Phoenix", osm: "way/943399389" },
   { name: "Einstein Bros. Bagels", address: null, lat: 33.450031, lon: -112.071628, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/2469618311" },
@@ -1197,6 +1198,8 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Highball", address: "1514 North 7th Avenue, Phoenix, AZ 85007", lat: 33.465342, lon: -112.082922, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/2699055884" },
   { name: "Hilton Garden Inn Phoenix Downtown", address: "15 East Monroe Street, Phoenix, AZ 85004", lat: 33.450076, lon: -112.073473, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/116513488" },
   { name: "Holiday Inn Express", address: "950 West Van Buren Street, Phoenix, AZ 85007", lat: 33.452581, lon: -112.085982, category: "other", is_large_venue: false, city: "Phoenix", osm: "node/11876198706" },
+  { name: "Holiday Inn Express & Suites Phoenix - Airport North", address: "800 North 44th Street, Phoenix, AZ 85008", lat: 33.456502, lon: -111.988151, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/829252115" },
+  { name: "Home2 Suites by Hilton Phoenix Airport North", address: "888 North 44th Street, Phoenix, AZ 85008", lat: 33.457201, lon: -111.988139, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/829252114" },
   { name: "Hotel Palomar Phoenix - a Kimpton Hotel", address: "2 East Jefferson Street, Phoenix, AZ 85004", lat: 33.447437, lon: -112.073213, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/109835115" },
   { name: "Hotel San Carlos", address: "202 North Central Avenue, Phoenix, AZ 85003", lat: 33.450529, lon: -112.074205, category: "other", is_large_venue: false, city: "Phoenix", osm: "node/2470073524" },
   { name: "Hu-O-Te Park", address: null, lat: 33.456702, lon: -112.086701, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/573746678" },
@@ -1277,6 +1280,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "New Windsor Hotel", address: "546 West Adams Street, Phoenix, AZ 85003", lat: 33.449582, lon: -112.081237, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/37057973" },
   { name: "Nina Mason Pulliam Rio Salado Audubon Center", address: "3131 South Central Avenue, Phoenix, AZ 85040", lat: 33.419118, lon: -112.072146, category: "concert", is_large_venue: false, city: "Phoenix", osm: "way/258295888" },
   { name: "Ninos Park", address: null, lat: 33.439545, lon: -112.0895, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/743355746" },
+  { name: "No Filter Coffee Shop & Coffee Catering", address: "3215 East Thunderbird Road, Phoenix, AZ 85254", lat: 33.6113, lon: -112.012481, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/11660837873" },
   { name: "Noah's African Coffee", address: null, lat: 33.466277, lon: -112.005284, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/11737901347" },
   { name: "Noble Ground Coffee", address: "701 West McDowell Road, Phoenix, AZ 85007", lat: 33.465442, lon: -112.082829, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/2699056309" },
   { name: "Nook Kitchen Downtown", address: "15 East Monroe Street, Phoenix, AZ 85004", lat: 33.450195, lon: -112.073613, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/7188831201" },
@@ -1337,6 +1341,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Premiere Inns", address: "10402 North Black Canyon Highway, Phoenix, AZ 85051", lat: 33.579914, lon: -112.117996, category: "other", is_large_venue: false, city: "Phoenix", osm: "relation/3184381" },
   { name: "Quality Inn Phoenix North I-17", address: "8101 North Black Canyon Highway, Phoenix, AZ 85021", lat: 33.555163, lon: -112.111485, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/384178381" },
   { name: "Rainbow Donuts", address: "2855 West Cactus Road, Phoenix, AZ 85029", lat: 33.596052, lon: -112.120843, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/8741361311" },
+  { name: "Rainbow Donuts", address: "3831 East Thunderbird Road, Phoenix, AZ 85032", lat: 33.611698, lon: -111.998528, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/3399307617" },
   { name: "Raising Cane's", address: "2715 West Peoria Avenue, Phoenix, AZ 85029", lat: 33.581346, lon: -112.118835, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/504371419" },
   { name: "Ramen Kagawa", address: "111 West Monroe Street, Phoenix, AZ 85003", lat: 33.449935, lon: -112.075419, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/9936224569" },
   { name: "Raven Golf Club - Phoenix", address: "3636 East Baseline Road, Phoenix, AZ 85042", lat: 33.382362, lon: -112.004318, category: "other", is_large_venue: false, city: "Phoenix", osm: "relation/3547141" },
@@ -1409,6 +1414,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Starbucks", address: null, lat: 33.495246, lon: -111.988302, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/2903427480" },
   { name: "Starbucks", address: "2824 North 44th Street, Phoenix, AZ 85008", lat: 33.479287, lon: -111.987588, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/960906098" },
   { name: "Starbucks", address: null, lat: 33.711502, lon: -112.206062, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/1015137938" },
+  { name: "Starbucks", address: "4002 East Thunderbird Road, Phoenix, AZ 85032", lat: 33.612234, lon: -111.995422, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/71076565" },
   { name: "Stardust", address: "401 West Van Buren Street, Phoenix, AZ 85003", lat: 33.450991, lon: -112.079686, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/9921363789" },
   { name: "State 48 Brewery - DTPHX", address: "345 West Van Buren Street, Phoenix, AZ 85003", lat: 33.451182, lon: -112.078678, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/9925757600" },
   { name: "Stem Wine Company", address: null, lat: 33.422224, lon: -112.043106, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/11561831163" },
@@ -1459,6 +1465,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "The Score at Cottonfields Golf Course", address: "5740 West Baseline Road, Phoenix, AZ 85339", lat: 33.384834, lon: -112.184444, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/264218347" },
   { name: "The Theodore Beer + Wine Bar and Bottle Shop", address: "110 East Roosevelt Street, Phoenix, AZ 85004", lat: 33.458858, lon: -112.072128, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/9832205463" },
   { name: "The Tipsy Coyote Bar & Grill", address: "7077 East Bell Road, Phoenix, AZ 85254", lat: 33.637996, lon: -111.928101, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/8007582914" },
+  { name: "The Toasted Owl Cafe", address: "4326 East Cactus Road, Phoenix, AZ 85032", lat: 33.599537, lon: -111.989028, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/13800328034" },
   { name: "The Torch Theatre", address: "4721 North Central Avenue, Phoenix, AZ 85012", lat: 33.506517, lon: -112.07354, category: "concert", is_large_venue: false, city: "Phoenix", osm: "node/6543167887" },
   { name: "The Wayward Taphouse", address: null, lat: 33.455264, lon: -112.086608, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/11408489405" },
   { name: "The Whining Pig", address: "201 East Washington Street, Phoenix, AZ 85003", lat: 33.447897, lon: -112.071013, category: "bar", is_large_venue: false, city: "Phoenix", osm: "node/10972324628" },
@@ -1482,6 +1489,7 @@ export const METRO_VENUES: MetroSeedVenue[] = [
   { name: "Virginia G. Piper Plaza", address: null, lat: 33.450832, lon: -112.068922, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/1171839353" },
   { name: "Vovomeena", address: "1515 North 7th Avenue, Phoenix, AZ 85003", lat: 33.465354, lon: -112.081975, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/4598939578" },
   { name: "Wanderin", address: "4140 East McDowell Road, Phoenix, AZ 85008", lat: 33.465967, lon: -111.991444, category: "bar", is_large_venue: false, city: "Phoenix", osm: "way/1087498167" },
+  { name: "WeBe Coffee Roasters", address: "3831 East Thunderbird Road, Phoenix, AZ 85032", lat: 33.611458, lon: -111.998585, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "node/13532334187" },
   { name: "Wendy's", address: "3025 West Peoria Avenue, Phoenix, AZ 85051", lat: 33.581352, lon: -112.124209, category: "restaurant", is_large_venue: false, city: "Phoenix", osm: "way/237171032" },
   { name: "Wesley Bolin Plaza", address: null, lat: 33.448138, lon: -112.09417, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/30694519" },
   { name: "West Lawn", address: null, lat: 33.506932, lon: -111.950023, category: "other", is_large_venue: false, city: "Phoenix", osm: "way/182106379" },

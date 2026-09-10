@@ -186,7 +186,7 @@ export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]
     // same input format; the filename suffix "__p[N]" marks later pages of a
     // 50-record query. Records in every page are merged by the same
     // metro-wide dedup, so nothing is double-counted.
-    for (const suffix of ["2", "3"]) {
+    for (const suffix of ["2", "3", "4"]) {
       const dirN = poisDir.replace(/\/?$/, suffix);
       try {
         for (const f of readdirSync(dirN).filter((x) => x.endsWith(".json")).sort()) {
