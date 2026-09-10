@@ -142,6 +142,49 @@ export interface VenuesResponse {
 
 export type Venue = VenuesResponse["venues"][number];
 
+/**
+ * REVAMP 1/2 — universal metro search (GET /api/v1/venues/search) + cities.
+ * Mirrors server/src/routes/venues.ts response shapes 1:1.
+ */
+export type VenueSort = "name" | "trending" | "going";
+
+export interface VenueSearchRow {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lon: number;
+  geofence_radius_m: number;
+  category: SpotCategory;
+  is_large_venue: boolean;
+  city: string;
+  /** Live confirmations on active future events at this spot (real; 0 when quiet). */
+  going_count: number;
+  /** Same real source as going_count — the "trending" sort key. */
+  trending_score: number;
+  /** Meters from lat/lon when a geosearch was requested; null otherwise. */
+  distance_m: number | null;
+}
+
+export interface VenuesSearchResponse {
+  venues: VenueSearchRow[];
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+  sort: VenueSort;
+}
+
+/** GET /api/v1/cities — real metro cities with verified-venue counts. */
+export interface CityRow {
+  city: string;
+  venue_count: number;
+}
+
+export interface CitiesResponse {
+  cities: CityRow[];
+}
+
 /** GET /api/v1/spots?q=&city=&category=&limit= — bare array (masked). */
 export type SpotsResponse = Spot[];
 
