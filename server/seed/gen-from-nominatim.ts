@@ -179,29 +179,32 @@ export function buildMetroVenues(poisDir = POIS_DIR): { venues: MetroSeedVenue[]
   const best = new Map<string, { v: MetroSeedVenue; addrLen: number }>();
   let rawSeen = 0;
 
-  let files: string[];
+  let files: { name: string; dir: string }[];
   try {
-    files = readdirSync(poisDir).filter((f) => f.endsWith(".json")).sort();
-    // Optional page-2 dir (e.g. /tmp/pois2): same input format, filename
-    // suffix "__p2" marks the second page of a 50-record query. Records in
-    // both pages are merged by the same metro-wide dedup.
-    const dir2 = poisDir.replace(/\/?$/, "2");
-    try {
-      const files2 = readdirSync(dir2).filter((f) => f.endsWith(".json"));
-      for (const f of files2) if (!files.includes(f)) files.push(f);
-      files.sort();
-    } catch { /* no page-2 dir — fine */ }
+    files = readdirSync(poisDir).filter((f) => f.endsWith(".json")).sort().map((name) => ({ name, dir: poisDir }));
+    // Optional page dirs (/tmp/pois2 = page 2, /tmp/pois3 = page 3, ...):
+    // same input format; the filename suffix "__p[N]" marks later pages of a
+    // 50-record query. Records in every page are merged by the same
+    // metro-wide dedup, so nothing is double-counted.
+    for (const suffix of ["2", "3"]) {
+      const dirN = poisDir.replace(/\/?$/, suffix);
+      try {
+        for (const f of readdirSync(dirN).filter((x) => x.endsWith(".json")).sort()) {
+          if (!files.some((e) => e.name === f)) files.push({ name: f, dir: dirN });
+        }
+      } catch { /* no such page dir — fine */ }
+    }
   } catch {
     return { venues: [], dropped: { no_pois_dir: 1 } };
   }
 
-  for (const f of files) {
+  for (const { name: f, dir } of files) {
     const m = f.match(/^([A-Za-z]+)__(.+?)(?:__p[0-9]+)?\.json$/);
     if (!m) { drop("bad_filename"); continue; }
     const [, fileCity, queryHint] = m;
     let recs: NomiRec[];
     try {
-      recs = JSON.parse(readFileSync(join(poisDir, f), "utf8")) as NomiRec[];
+      recs = JSON.parse(readFileSync(join(dir, f), "utf8")) as NomiRec[];
       if (!Array.isArray(recs)) { drop("bad_file_shape"); continue; }
     } catch {
       drop("unparseable"); continue;
