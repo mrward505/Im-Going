@@ -18,6 +18,8 @@ import { colors } from "../theme";
 import { OnboardingFlow } from "../screens/onboarding/OnboardingFlow";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { TrendingScreen } from "../screens/TrendingScreen";
+import { SearchScreen } from "../screens/SearchScreen";
+import { MapScreen } from "../screens/MapScreen";
 import { MyPlansScreen } from "../screens/MyPlansScreen";
 import { AnnounceSheet } from "../screens/AnnounceSheet";
 import { SpotDetailStub } from "../screens/SpotDetailStub";
@@ -29,6 +31,8 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Trending: undefined;
+  Search: undefined;
+  Map: undefined;
   MyPlans: undefined;
   Profile: undefined;
 };
@@ -64,6 +68,7 @@ function MainTabs({ onLogout }: { onLogout: () => void }): React.JSX.Element {
             headerShown: false,
             tabBarActiveTintColor: colors.primary,
             tabBarInactiveTintColor: colors.textDim,
+            tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
             tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
           }}
         >
@@ -77,6 +82,18 @@ function MainTabs({ onLogout }: { onLogout: () => void }): React.JSX.Element {
                 onOpenSpot={(id) => setOpenSpotId(id)}
               />
             )}
+          </Tab.Screen>
+          <Tab.Screen
+            name="Search"
+            options={{ tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} /> }}
+          >
+            {() => <SearchScreen onOpenSpot={(id) => setOpenSpotId(id)} />}
+          </Tab.Screen>
+          <Tab.Screen
+            name="Map"
+            options={{ tabBarIcon: ({ color, size }) => <Ionicons name="map" size={size} color={color} /> }}
+          >
+            {() => <MapScreen onOpenSpot={(id) => setOpenSpotId(id)} />}
           </Tab.Screen>
           <Tab.Screen
             name="MyPlans"

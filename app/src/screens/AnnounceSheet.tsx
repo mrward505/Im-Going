@@ -1,8 +1,11 @@
 /**
  * Announce flow (spec §3.3 + §2b) as a modal sheet:
  *   1. Search seeded venues (api.venues) → pick one, or "Create custom spot"
- *      (name, address, lat/lon pin input, category — house/frat/backyard
- *      first-class; masked-address rule is display-only here).
+ *      (name, address optional, interactive metro map pin drop with
+ *      use-my-location, category — house/frat/backyard first-class;
+ *      masked-address rule is display-only here). REVAMP 2: the pin is
+ *      dropped/tapped on the map — no more manual lat/lon typing; it writes
+ *      the same lat/lon fields the API always accepted.
  *   2. Start-time picker (quick chips defaulting to Tonight 21:00, plus a
  *      custom datetime input; 14-day cap + 30-min floor enforced server-side
  *      and pre-checked client-side) + optional 140-char note.
@@ -20,11 +23,13 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as Location from "expo-location";
 import { api, ApiError } from "../api/client";
 import { shareSpot, shareErrorCopy } from "../api/shareCard";
 import type { EventView, Spot, Venue } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill } from "../components/hero";
+import { MetroMap } from "../components/MetroMap";
 
 type Step = "pick" | "custom" | "time";
 type StartPreset = "tonight" | "tomorrow" | "custom";
@@ -63,13 +68,13 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
 
   const [spot, setSpot] = useState<{ id: string; name: string } | null>(null);
 
-  // custom-spot form
+  // custom-spot form (REVAMP 2: pin dropped on the map, not typed)
   const [cName, setCName] = useState("");
   const [cAddress, setCAddress] = useState("");
-  const [cLat, setCLat] = useState("");
-  const [cLon, setCLon] = useState("");
+  const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null);
   const [cCategory, setCCategory] = useState<string>("house");
   const [creating, setCreating] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   // time + note
   const [preset, setPreset] = useState<StartPreset>("tonight");
@@ -90,8 +95,7 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
     setSpot(null);
     setCName("");
     setCAddress("");
-    setCLat("");
-    setCLon("");
+    setPin(null);
     setCCategory("house");
     setPreset("tonight");
     setCustomText("");
@@ -143,16 +147,33 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
     return Number.isNaN(d.getTime()) ? null : d;
   }, [preset, customText]);
 
+  async function dropPinAtMyLocation(): Promise<void> {
+    if (locating) return;
+    setLocating(true);
+    setError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Location permission is off — tap the map to pin instead.");
+        return;
+      }
+      const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setPin({ lat: fix.coords.latitude, lon: fix.coords.longitude });
+    } catch {
+      setError("Couldn't get your location — tap the map to pin instead.");
+    } finally {
+      setLocating(false);
+    }
+  }
+
   async function createCustomSpot(): Promise<void> {
     setError(null);
-    const lat = Number(cLat);
-    const lon = Number(cLon);
     if (!cName.trim()) {
       setError("Give the spot a name.");
       return;
     }
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) {
-      setError("Enter a valid pin: latitude −90…90, longitude −180…180.");
+    if (!pin) {
+      setError("Drop the pin on the map first.");
       return;
     }
     setCreating(true);
@@ -160,8 +181,8 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
       const res = await api.createSpot({
         name: cName.trim(),
         address: cAddress.trim() || undefined,
-        lat,
-        lon,
+        lat: pin.lat,
+        lon: pin.lon,
         category: cCategory,
       });
       const created: Spot = res.spot;
@@ -338,25 +359,31 @@ export function AnnounceSheet({ visible, onClose, onPublished }: Props): React.J
               value={cAddress}
               onChangeText={setCAddress}
             />
-            <Text style={styles.label}>Pin (latitude / longitude)</Text>
-            <View style={styles.latlon}>
-              <TextInput
-                style={[styles.input, styles.latlonInput]}
-                placeholder="33.42"
-                placeholderTextColor={colors.textDim}
-                value={cLat}
-                onChangeText={setCLat}
-                keyboardType="numbers-and-punctuation"
-              />
-              <TextInput
-                style={[styles.input, styles.latlonInput]}
-                placeholder="-111.93"
-                placeholderTextColor={colors.textDim}
-                value={cLon}
-                onChangeText={setCLon}
-                keyboardType="numbers-and-punctuation"
-              />
-            </View>
+            <Text style={styles.label}>Pin it on the map</Text>
+            <MetroMap
+              pinMode
+              pinLat={pin?.lat ?? null}
+              pinLon={pin?.lon ?? null}
+              onPin={(lat, lon) => setPin({ lat, lon })}
+              height={230}
+              showCityLabels={false}
+            />
+            <Pressable
+              onPress={() => void dropPinAtMyLocation()}
+              disabled={locating}
+              style={({ pressed }) => [styles.locate, pressed && styles.pressed]}
+            >
+              {locating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.locateText}>📍 Use my location</Text>
+              )}
+            </Pressable>
+            {pin ? (
+              <Text style={styles.pinned}>
+                Pinned at {pin.lat.toFixed(5)}, {pin.lon.toFixed(5)}
+              </Text>
+            ) : null}
             <Text style={styles.label}>Category</Text>
             <View style={styles.chips}>
               {CUSTOM_CATEGORIES.map((c) => (
@@ -562,12 +589,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
-  latlon: {
-    flexDirection: "row",
-    gap: spacing.sm,
+  locate: {
+    marginTop: spacing.sm,
+    paddingVertical: 11,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: "center",
+    backgroundColor: colors.surface,
   },
-  latlonInput: {
-    flex: 1,
+  locateText: {
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  pinned: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.75,
   },
   chips: {
     flexDirection: "row",

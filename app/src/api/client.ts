@@ -12,6 +12,7 @@ import type {
   ApiErrorBody,
   CancelGoingResponse,
   CheckinResponse,
+  CitiesResponse,
   ConfirmGoingResponse,
   CreatePostResponse,
   CreateSpotResponse,
@@ -33,7 +34,9 @@ import type {
   SpotShareResponse,
   SpotsResponse,
   TrendingResponse,
+  VenueSort,
   VenuesResponse,
+  VenuesSearchResponse,
 } from "./types";
 
 export const API_URL: string = process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:8081";
@@ -147,6 +150,39 @@ export const api = {
     if (params.radius_m !== undefined) qs.set("radius_m", String(params.radius_m));
     const suffix = qs.toString();
     return request(`/api/v1/venues${suffix ? `?${suffix}` : ""}`);
+  },
+  /**
+   * REVAMP 1/2 — universal metro search (public route; no auth needed).
+   * Params mirror the server schema exactly; empty q is omitted (server
+   * requires q min length 1 when present).
+   */
+  venuesSearch(params: {
+    q?: string;
+    city?: string;
+    category?: string;
+    sort?: VenueSort;
+    page?: number;
+    limit?: number;
+    lat?: number;
+    lon?: number;
+    radius_km?: number;
+  }): Promise<VenuesSearchResponse> {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.city) qs.set("city", params.city);
+    if (params.category) qs.set("category", params.category);
+    if (params.sort) qs.set("sort", params.sort);
+    if (params.page !== undefined) qs.set("page", String(params.page));
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params.lat !== undefined) qs.set("lat", String(params.lat));
+    if (params.lon !== undefined) qs.set("lon", String(params.lon));
+    if (params.radius_km !== undefined) qs.set("radius_km", String(params.radius_km));
+    const suffix = qs.toString();
+    return request(`/api/v1/venues/search${suffix ? `?${suffix}` : ""}`, { auth: false });
+  },
+  /** REVAMP 1 — real metro cities with venue counts (public route). */
+  cities(): Promise<CitiesResponse> {
+    return request("/api/v1/cities", { auth: false });
   },
   myGoing(): Promise<MyGoingResponse> {
     return request("/api/v1/me/going");
