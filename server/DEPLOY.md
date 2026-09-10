@@ -49,7 +49,7 @@ cd server
 DATABASE_URL='<neon-string>' bun run migrate:status  # expect: all pending
 DATABASE_URL='<neon-string>' bun run migrate         # apply
 DATABASE_URL='<neon-string>' bun run seed:check      # report only, no writes
-DATABASE_URL='<neon-string>' bun run seed            # apply the 806-venue Tempe seed (idempotent)
+DATABASE_URL='<neon-string>' bun run seed            # apply the Phoenix-metro seed — 981 Tempe anchor + 1,837 metro venues, grouped city counts (idempotent)
 curl https://<your-render-service>.onrender.com/health  # expect 200 {"status":"ok","db":"ok",...}
 ```
 

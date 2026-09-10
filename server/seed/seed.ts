@@ -19,6 +19,23 @@
 import { Pool } from "pg";
 import { levenshtein, nameSimilarity, FUZZY_NAME_THRESHOLD, haversineMeters, SAME_PLACE_RADIUS_M } from "../src/lib/fuzzy";
 import { TEMPE_VENUES } from "../src/data/tempe-venues";
+import { METRO_VENUES } from "../src/data/metro-venues";
+
+interface SeedVenue {
+  name: string;
+  address: string | null;
+  lat: number;
+  lon: number;
+  category: "bar" | "club" | "concert" | "restaurant" | "house" | "other";
+  is_large_venue: boolean;
+}
+
+// Anchor first (Tempe/Overpass), then metro (Nominatim) — one dedup pass over
+// the combined list, so metro rows that duplicate Tempe rows update in place.
+const ALL_VENUES: (SeedVenue & { city: string })[] = [
+  ...TEMPE_VENUES.map((v) => ({ ...v, city: "Tempe" as const })),
+  ...METRO_VENUES.map((v) => ({ ...v, city: v.city })),
+];
 
 // Spec §2e geofence radii: verified POI 150 m; large venue/concert 400 m.
 const POI_RADIUS_M = 150;
@@ -107,8 +124,8 @@ export async function seedVenues(dryRun = false): Promise<Report> {
     // Chunked transaction: one commit per 200 venues keeps each statement
     // stream small while the whole run stays restartable (re-run = no-op).
     const CHUNK = 200;
-    for (let i = 0; i < TEMPE_VENUES.length; i += CHUNK) {
-      const chunk = TEMPE_VENUES.slice(i, i + CHUNK);
+    for (let i = 0; i < ALL_VENUES.length; i += CHUNK) {
+      const chunk = ALL_VENUES.slice(i, i + CHUNK);
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -127,7 +144,7 @@ export async function seedVenues(dryRun = false): Promise<Report> {
                 `UPDATE spots SET address = COALESCE(address, $2), lat = $3, lon = $4,
                         geofence_radius_m = $5, category = $6, is_large_venue = $7, city = $8
                  WHERE id = $1`,
-                [existing.id, v.address, v.lat, v.lon, radius, v.category, v.is_large_venue, "Tempe"],
+                [existing.id, v.address, v.lat, v.lon, radius, v.category, v.is_large_venue, v.city],
                 // Note: address is COALESCEd so a previously-set address is never blanked.
               );
               updated++;
@@ -139,7 +156,7 @@ export async function seedVenues(dryRun = false): Promise<Report> {
               await client.query(
                 `INSERT INTO spots (name, address, lat, lon, geofence_radius_m, category, is_verified, is_large_venue, city, created_by)
                  VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, NULL)`,
-                [v.name, v.address, v.lat, v.lon, radius, v.category, v.is_large_venue, "Tempe"],
+                [v.name, v.address, v.lat, v.lon, radius, v.category, v.is_large_venue, v.city],
               );
             }
             inserted++;
@@ -157,7 +174,7 @@ export async function seedVenues(dryRun = false): Promise<Report> {
     }
 
     return {
-      total: TEMPE_VENUES.length,
+      total: ALL_VENUES.length,
       inserted,
       updated,
       skipped: inFileDupes,
