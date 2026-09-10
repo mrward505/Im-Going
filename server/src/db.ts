@@ -287,3 +287,66 @@ export interface FeedPoster {
 export function serializeFeedPoster(poster: FeedPoster): FeedPoster {
   return { id: poster.id, display_name: poster.display_name, star_rating: poster.star_rating };
 }
+
+// --- REVAMP 3: social import ("Bring your nights") ----------------------------
+
+export interface ImportedPostRow {
+  id: string;
+  user_id: string;
+  spot_id: string;
+  platform: "instagram" | "x" | "tiktok" | "other";
+  source_url: string;
+  media_url: string | null;
+  caption: string | null;
+  been_there_kind: "checkin" | "claim";
+  check_in_id: string | null;
+  claim_status: "pending" | "verified" | "rejected";
+  created_at: string;
+}
+
+export interface SerializedImportedPost {
+  id: string;
+  user_id: string;
+  spot_id: string;
+  platform: ImportedPostRow["platform"];
+  source_url: string;
+  media_url: string | null;
+  caption: string | null;
+  /** The been-there basis: a REAL verified check-in, or an explicit claim. */
+  been_there: { kind: "checkin" | "claim"; check_in_id: string | null };
+  /**
+   * checkin-backed imports are 'verified' at creation; claim-backed imports
+   * stay 'pending' until the trust engine verifies them (owner directive:
+   * the claim is explicit, the verification is later, nothing is auto-trusted).
+   */
+  verification: ImportedPostRow["claim_status"];
+  /** "recent" signal: true while the import is under the 30-day window. */
+  is_recent: boolean;
+  created_at: string;
+  spot: SpotForViewer | null;
+}
+
+/** Imports stay "recent" for 30 days after import (REVAMP 3 "recent" signal). */
+export const IMPORT_RECENT_DAYS = 30;
+
+export function serializeImportedPost(
+  row: ImportedPostRow,
+  spot: SpotRow | null,
+  viewer: { confirmed: boolean },
+): SerializedImportedPost {
+  const ageMs = Date.now() - new Date(row.created_at).getTime();
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    spot_id: row.spot_id,
+    platform: row.platform,
+    source_url: row.source_url,
+    media_url: row.media_url,
+    caption: row.caption,
+    been_there: { kind: row.been_there_kind, check_in_id: row.check_in_id },
+    verification: row.claim_status,
+    is_recent: ageMs <= IMPORT_RECENT_DAYS * 24 * 3_600_000,
+    created_at: row.created_at,
+    spot: spot ? serializeSpotRaw(spot, viewer) : null,
+  };
+}
