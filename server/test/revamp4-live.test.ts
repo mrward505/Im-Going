@@ -42,7 +42,7 @@ describe("revamp 4 live: going-now + heat on search rows, top_goer on detail", (
     const u = await pool.query<{ id: string }>(
       `INSERT INTO users (phone, dob, display_name, username, city, star_rating)
        VALUES ($1, '2000-01-01', $2, $3, 'Tempe', 5.0) RETURNING id`,
-      [`+1${String(6020000000 + (Date.now() % 999999))}`, `${TAG} Star`, `r4star_${TAG}`.slice(0, 20)],
+      [`+1${String(6020000000 + (Date.now() % 999999))}`, `${TAG} Star`, `r4star_${TAG}`.toLowerCase().slice(0, 20)],
     );
     const e = await pool.query<{ id: string }>(
       `INSERT INTO events (spot_id, start_at, note) VALUES ($1, now() + interval '1 hour', 'r4-test') RETURNING id`,

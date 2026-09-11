@@ -219,7 +219,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     let topGoer: { display_name: string; star_rating: number } | null = null;
     if (next) {
       const { rows: tg } = await pool.query<{ display_name: string; star_rating: number }>(
-        `SELECT u.display_name, u.star_rating
+        `SELECT u.display_name, u.star_rating::float AS star_rating
          FROM going g JOIN users u ON u.id = g.user_id
          WHERE g.event_id = $1 AND g.status = 'active'
            AND ($2::uuid IS NULL OR g.user_id <> $2::uuid)
