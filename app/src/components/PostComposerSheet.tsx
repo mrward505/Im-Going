@@ -46,6 +46,11 @@ function extOf(name: string | null | undefined, fallback: string): string {
   return m?.[1] ?? fallback;
 }
 
+// REVAMP 3: exported so the "Bring your nights" import flow reuses the same
+// honest media contract (requestUploadUrl → PUT bytes → object_key). Third
+// parties' post content is never fetched — this uploads media the user owns.
+export { CONTENT_TYPE_BY_EXT, extOf };
+
 interface Picked {
   uri: string;
   kind: PostMediaType;
@@ -92,7 +97,7 @@ async function pickFromLibrary(kind: PostMediaType | null): Promise<Picked | nul
 }
 
 /** Fetch local uri → bytes (works with file://, content://, and web blob:). */
-async function readBytes(uri: string): Promise<ArrayBuffer> {
+export async function readBytes(uri: string): Promise<ArrayBuffer> {
   const res = await fetch(uri);
   if (!res.ok) throw new ApiError(0, "read_failed", "Could not read the selected media.");
   return res.arrayBuffer();
@@ -102,7 +107,7 @@ async function readBytes(uri: string): Promise<ArrayBuffer> {
  * PUT the media bytes with real upload progress via XHR (fetch has no upload
  * progress in RN). RN and web both accept ArrayBuffer bodies.
  */
-function uploadWithProgress(
+export function uploadWithProgress(
   url: string,
   method: string,
   headers: Record<string, string>,
