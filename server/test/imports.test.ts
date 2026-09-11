@@ -44,7 +44,7 @@ async function boot(): Promise<void> {
 let seq = 0;
 async function newUser(prefix: string): Promise<{ token: string; id: string }> {
   seq += 1;
-  const phone = `+1999${String(1000000 + seq).padStart(7, "0")}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0").slice(0, 3)}${String(Date.now() % 1000).padStart(3, "0")}`.slice(0, 12);
+  const phone = `+1777${String(1000000 + seq).padStart(7, "0")}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0").slice(0, 3)}${String(Date.now() % 1000).padStart(3, "0")}`.slice(0, 12);
   const req = await jfetch("/api/v1/auth/otp/request", { method: "POST", body: JSON.stringify({ phone }) });
   if (req.status !== 201) throw new Error(`otp request failed: ${JSON.stringify(req.body)}`);
   const ver = await jfetch("/api/v1/auth/otp/verify", {
