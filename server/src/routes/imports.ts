@@ -97,6 +97,15 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const storage = getStorage();
       const resolved = storage.getPublicUrl(input.object_key);
       if (!resolved) throw badRequest("unknown object_key — request an upload URL first");
+      // Honest media contract: the media_url must resolve to media the user
+      // actually uploaded. The local provider can read bytes back, so a
+      // minted-but-never-uploaded key is rejected here (never a dead link).
+      // Providers without a read-back (future cloud slots) fall back to the
+      // shape-only gate, matching posts.ts.
+      const existing = storage.getObject?.(input.object_key);
+      if (existing === null) {
+        throw badRequest("object_key has no uploaded media — PUT the bytes first");
+      }
       mediaUrl = resolved;
     }
 
