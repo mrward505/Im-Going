@@ -13,6 +13,7 @@ import { registerEventRoutes } from "./routes/events";
 import { registerCheckinRoutes } from "./routes/checkins";
 import { registerPostRoutes } from "./routes/posts";
 import { registerInviteRoutes } from "./routes/invites";
+import { registerImportRoutes } from "./routes/imports";
 import { registerTrendingRoutes, registerShareRoutes } from "./routes/trending";
 import { toApiError } from "./lib/errors";
 import { setServerAddress } from "./lib/storage";
@@ -113,6 +114,7 @@ export async function buildApp() {
   await registerCheckinRoutes(app);
   await registerPostRoutes(app);
   await registerInviteRoutes(app);
+  await registerImportRoutes(app);
   await registerTrendingRoutes(app);
   await registerShareRoutes(app);
 

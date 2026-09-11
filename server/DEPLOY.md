@@ -39,6 +39,20 @@ Set these in the Render dashboard (service → Environment). Never commit secret
 3. `GET /health` returns 200 with `{"status":"ok","db":"ok",…}` and is the
    Render health check (`healthCheckPath: /health`).
 
+### Migration notes
+
+- Migrations are incremental + idempotent: a pending file is applied once and
+  recorded; re-running skips it. No manual (re)apply step on deploy — boot runs
+  it automatically.
+- `005_social_imports.sql` (REVAMP 3) adds the `imported_posts` table and the
+  per-user cap trigger. Pure SQL, no geospatial types — applies on any Postgres.
+  Prod does **not** need PostGIS for this migration (it already carries the
+  slice-4c geospatial indexes from `001`).
+- Local dev only: `001` requires the `postgis` extension to exist in the dev
+  database (`apt install postgresql-16-postgis-3`, then run
+  `CREATE EXTENSION IF NOT EXISTS postgis` once as the postgres superuser
+  before your first `bun run migrate`). `005` has no such requirement.
+
 ## 3. One-time setup against prod
 
 From your machine, pointing at the Neon DB (get `DATABASE_URL` from the Neon
