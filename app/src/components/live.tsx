@@ -33,7 +33,7 @@ const PULSE_MIN = 0.55;
 const PULSE_MAX = 1;
 
 /** Soft continuous pulse — the "alive" tick when a counter is live. */
-function usePulse(enabled: boolean): Animated.Value {
+export function usePulse(enabled: boolean): Animated.Value {
   const pulse = useRef(new Animated.Value(PULSE_MAX)).current;
   useEffect(() => {
     if (!enabled) {
@@ -141,6 +141,93 @@ export function GoingWithYou({
     </Text>
   );
 }
+/**
+ * REVAMP 4 — pulsing "N going now" inline (bodies on the floor RIGHT NOW from
+ * real Going rows in the event window). Renders nothing for 0 (honest quiet).
+ */
+export function GoingNowInline({
+  count,
+  color = colors.primary,
+  compact = false,
+}: {
+  count: number | null | undefined;
+  color?: string;
+  compact?: boolean;
+}): React.JSX.Element | null {
+  const live = (count ?? 0) > 0;
+  const pulse = usePulse(live);
+  if (!live) return null;
+  return (
+    <Animated.View style={[styles.goingNowLine, { opacity: pulse }]}>
+      <View style={[styles.goingNowDot, { backgroundColor: color }]} />
+      <Text style={[styles.goingNowText, { color }, compact && styles.goingNowCompact]}>
+        {count} going now
+      </Text>
+    </Animated.View>
+  );
+}
+/**
+ * REVAMP 4 — "X's going" pull line: the highest-star active goer on the next
+ * event (real Going rows, server picks top_goer). Makes an influencer's pull
+ * concrete. Renders nothing when no one else is going.
+ */
+export function TopGoerLine({
+  topGoer,
+}: {
+  topGoer: { display_name: string; star_rating: number } | null | undefined;
+}): React.JSX.Element | null {
+  if (!topGoer) return null;
+  const gold = topGoer.star_rating >= 4;
+  return (
+    <View style={styles.topGoerLine}>
+      <Text style={styles.topGoerStar}>{gold ? "★" : "·"}</Text>
+      <Text style={styles.topGoerName} numberOfLines={1}>
+        {topGoer.display_name}&apos;s going
+      </Text>
+      <Text style={[styles.topGoerStars, gold && styles.topGoerStarsGold]}>
+        {Number.isFinite(topGoer.star_rating) ? topGoer.star_rating.toFixed(1) : "–"}★
+      </Text>
+    </View>
+  );
+}
+/**
+ * REVAMP 4 — soft pulsing skeleton block for loaders (no numbers, just a
+ * breathing placeholder so screens feel alive while real data arrives).
+ */
+export function Skeleton({
+  width = "100%",
+  height = 14,
+  radius = 8,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: object;
+}): React.JSX.Element {
+  const pulse = usePulse(true);
+  return (
+    <Animated.View
+      style={[
+        { width, height, borderRadius: radius, backgroundColor: colors.surfaceAlt, opacity: pulse },
+        style,
+      ]}
+    />
+  );
+}
+/** REVAMP 4 — a full card-shaped skeleton row (used by Trending/Search). */
+export function CardSkeleton(): React.JSX.Element {
+  return (
+    <View style={styles.skelCard}>
+      <Skeleton width="62%" height={16} />
+      <Skeleton width="80%" height={11} style={{ marginTop: 6 }} />
+      <View style={styles.skelFoot}>
+        <Skeleton width={64} height={18} radius={999} />
+        <Skeleton width={44} height={18} radius={999} />
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   badge: {
@@ -175,5 +262,67 @@ const styles = StyleSheet.create({
   },
   gwyDim: {
     color: colors.textDim,
+  },
+  goingNowLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+  },
+  goingNowDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  goingNowText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  goingNowCompact: {
+    fontSize: 12,
+  },
+  topGoerLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255, 77, 109, 0.08)",
+    borderColor: "rgba(255, 77, 109, 0.25)",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  topGoerStar: {
+    color: "#FFD166",
+    fontSize: 11,
+  },
+  topGoerName: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  topGoerStars: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  topGoerStarsGold: {
+    color: "#FFD166",
+  },
+  skelCard: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  skelFoot: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: 10,
   },
 });

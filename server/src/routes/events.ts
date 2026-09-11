@@ -213,6 +213,22 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     const audience = await spotAudience(pool, id);
     const goingWithNext =
       next && viewerId ? await goingWithYou(pool, next.id, viewerId) : null;
+    // REVAMP 4 — "X's going": the highest-credibility active goer on the next
+    // event (excluding the viewer, real Going rows joined to the users table).
+    // Makes an influencer's pull concrete without any invented numbers.
+    let topGoer: { display_name: string; star_rating: number } | null = null;
+    if (next) {
+      const { rows: tg } = await pool.query<{ display_name: string; star_rating: number }>(
+        `SELECT u.display_name, u.star_rating::float AS star_rating
+         FROM going g JOIN users u ON u.id = g.user_id
+         WHERE g.event_id = $1 AND g.status = 'active'
+           AND ($2::uuid IS NULL OR g.user_id <> $2::uuid)
+         ORDER BY u.star_rating DESC, g.created_at ASC
+         LIMIT 1`,
+        [next.id, viewerId],
+      );
+      topGoer = tg[0] ?? null;
+    }
     return {
       spot: serializeSpotRaw(spot, { confirmed }),
       next_event: next
@@ -225,6 +241,7 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
       going_now: audience.going_now,
       heat_count: audience.heat_count,
       heat_level: audience.heat_level,
+      top_goer: topGoer,
     };
   });
 

@@ -20,7 +20,7 @@ import { api, ApiError } from "../api/client";
 import type { TrendingRow } from "../api/types";
 import { colors, spacing } from "../theme";
 import { AvatarCluster, CategoryPill, RankBadge, formatNextStart } from "../components/hero";
-import { HeatBadge } from "../components/live";
+import { CardSkeleton, HeatBadge } from "../components/live";
 
 interface Props {
   onAnnounce: () => void;
@@ -101,8 +101,10 @@ export function TrendingScreen({ onAnnounce, onOpenSpot }: Props): React.JSX.Ele
         <Text style={styles.title}>Trending tonight</Text>
       </View>
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={styles.skelList}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <CardSkeleton key={i} />
+          ))}
         </View>
       ) : error ? (
         <View style={styles.center}>
@@ -161,6 +163,10 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.md,
     paddingBottom: 96,
+  },
+  skelList: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
   },
   card: {
     backgroundColor: colors.card,

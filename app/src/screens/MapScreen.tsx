@@ -22,6 +22,7 @@ import type { CityRow, VenueSearchRow } from "../api/types";
 import { colors, spacing } from "../theme";
 import { MetroMap, VenuePin } from "../components/MetroMap";
 import { CategoryPill } from "../components/hero";
+import { GoingNowInline, HeatBadge } from "../components/live";
 import { formatDistanceM } from "../lib/metro";
 
 interface Props {
@@ -51,6 +52,9 @@ export function MapScreen({ onOpenSpot }: Props): React.JSX.Element {
         lon: v.lon,
         going_count: v.going_count,
         trending_score: v.trending_score,
+        heat_level: v.heat_level ?? 0,
+        going_now: v.going_now ?? 0,
+        heat_count: v.heat_count ?? 0,
       })),
     [venues],
   );
@@ -207,6 +211,17 @@ export function MapScreen({ onOpenSpot }: Props): React.JSX.Element {
                 <Text style={[styles.cardGoing, selectedPin.going_count > 0 && styles.cardGoingHot]}>
                   {selectedPin.going_count > 0 ? `● ${selectedPin.going_count} going` : "quiet — no one going yet"}
                 </Text>
+              </View>
+              <View style={styles.cardLive}>
+                <HeatBadge
+                  signals={{
+                    going_now: selectedPin.going_now ?? 0,
+                    heat_level: selectedPin.heat_level ?? 0,
+                    heat_count: selectedPin.heat_count ?? 0,
+                  }}
+                  size="sm"
+                />
+                <GoingNowInline count={selectedPin.going_now} compact />
               </View>
               {distanceLine ? <Text style={styles.cardDistance}>{distanceLine}</Text> : null}
               <Pressable
@@ -371,6 +386,13 @@ const styles = StyleSheet.create({
   cardGoingHot: {
     color: colors.accent,
     fontWeight: "800",
+  },
+  cardLive: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    flexWrap: "wrap",
   },
   cardDistance: {
     color: colors.textDim,

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../db/pool";
+import { spotAudience } from "../lib/audience";
 
 /**
  * Venue discovery (slices 2 + revamp 1).
@@ -187,6 +188,19 @@ export async function registerVenueRoutes(app: FastifyInstance): Promise<void> {
        LIMIT ${limit} OFFSET ${offset}`,
       params,
     );
+    // REVAMP 4 — live-audience per row (real Going/Event rows via the same
+    // spotAudience snapshot as trending + spot detail): going_now (bodies in
+    // the event window right now), heat_count/heat_level (60-min confirmation
+    // velocity). Additive; quiet spots report zeros.
+    const venues = await Promise.all(rows.map(async (row) => {
+      const aud = await spotAudience(pool, row.id as string);
+      return {
+        ...row,
+        going_now: aud.going_now,
+        heat_count: aud.heat_count,
+        heat_level: aud.heat_level,
+      };
+    }));
 
     const { rows: totalRows } = await pool.query<{ n: number }>(
       `SELECT count(*)::int AS n
@@ -201,7 +215,7 @@ export async function registerVenueRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return reply.send({
-      venues: rows,
+      venues,
       page: q.page,
       limit,
       total: totalRows[0]?.n ?? 0,
