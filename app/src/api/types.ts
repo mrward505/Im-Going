@@ -436,3 +436,69 @@ export interface RequestUploadUrlResponse {
     expires_at: string;
   };
 }
+
+// --- REVAMP 3: social import ("Bring your nights") ----------------------------
+
+export type ImportPlatform = "instagram" | "x" | "tiktok" | "other";
+
+/**
+ * SerializedImportedPost (server/src/db.ts serializeImportedPost). Mirrors the
+ * wire shape 1:1 — the been-there basis is nested under `been_there`, and the
+ * claim status surfaces as `verification` (verified for checkin-backed rows,
+ * pending for claim-backed rows until the trust engine verifies them).
+ */
+export interface ImportedPost {
+  id: string;
+  user_id: string;
+  spot_id: string;
+  platform: ImportPlatform;
+  /** Public URL of the user's own post on the other platform (provenance). */
+  source_url: string;
+  media_url: string | null;
+  caption: string | null;
+  /** A REAL verified check-in, or an explicit claim — never auto-asserted. */
+  been_there: { kind: "checkin" | "claim"; check_in_id: string | null };
+  /** 'verified' when checkin-backed; 'pending'|'rejected' while a claim is unproven. */
+  verification: "pending" | "verified" | "rejected";
+  /** True inside the 30-day window after import ("recent" signal). */
+  is_recent: boolean;
+  created_at: string;
+  spot: Spot | null;
+}
+
+/** GET /api/v1/me/imports */
+export interface ImportsResponse {
+  imports: ImportedPost[];
+  limit: number;
+  remaining: number;
+}
+
+/** POST /api/v1/me/imports body (contract in server/src/routes/imports.ts). */
+export interface CreateImportInput {
+  platform: ImportPlatform;
+  source_url: string;
+  spot_id: string;
+  caption?: string;
+  /** External URL of media the user owns/hosts — XOR object_key. */
+  media_url?: string;
+  /** Key minted by the media upload contract (requestUploadUrl → PUT) — XOR media_url. */
+  object_key?: string;
+  /** Omitted → the API auto-uses a real verified check-in when one exists. */
+  been_there?: "checkin" | "claim";
+  /** Optional corroboration for an explicit claim (≤140). */
+  claim?: string;
+}
+
+/** POST /api/v1/me/imports (201) */
+export interface CreateImportResponse {
+  imported: ImportedPost;
+  limit: number;
+  imports_remaining: number;
+}
+
+/** DELETE /api/v1/me/imports/:id */
+export interface DeleteImportResponse {
+  id: string;
+  imports_remaining: number;
+  limit: number;
+}

@@ -14,10 +14,14 @@ import type {
   CheckinResponse,
   CitiesResponse,
   ConfirmGoingResponse,
+  CreateImportInput,
+  CreateImportResponse,
   CreatePostResponse,
   CreateSpotResponse,
+  DeleteImportResponse,
   EventDetailResponse,
   EventGoingResponse,
+  ImportsResponse,
   MeResponse,
   ModerationReason,
   MyGoingResponse,
@@ -295,6 +299,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     });
+  },
+  // --- REVAMP 3: social import ("Bring your nights") --------------------------
+  myImports(): Promise<ImportsResponse> {
+    return request("/api/v1/me/imports");
+  },
+  createImport(input: CreateImportInput): Promise<CreateImportResponse> {
+    return request("/api/v1/me/imports", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteImport(id: string): Promise<DeleteImportResponse> {
+    return request(`/api/v1/me/imports/${id}`, { method: "DELETE" });
   },
   async logout(): Promise<void> {
     await clearToken();
