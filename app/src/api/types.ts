@@ -164,6 +164,13 @@ export interface VenueSearchRow {
   trending_score: number;
   /** Meters from lat/lon when a geosearch was requested; null otherwise. */
   distance_m: number | null;
+  /**
+   * REVAMP 4 — live-audience snapshot per search row (same real Going/Event
+   * source as trending + spot detail). Additive; quiet spots report zeros.
+   */
+  going_now: number;
+  heat_count: number;
+  heat_level: SpotAudienceSignals["heat_level"];
 }
 
 export interface VenuesSearchResponse {
@@ -226,6 +233,12 @@ export interface SpotDetailResponse {
   going_now: number;
   heat_count: number;
   heat_level: SpotAudienceSignals["heat_level"];
+  /**
+   * REVAMP 4 — highest-star active goer on the next event excluding the
+   * viewer (real Going rows joined to users); null when no one else is going
+   * or no next event. Drives the "X's going" pull line.
+   */
+  top_goer: { display_name: string; star_rating: number } | null;
 }
 /** GET /api/v1/spots/:id/share — share-card snapshot + live share budget (slice 4c). */
 export interface SpotShareResponse {

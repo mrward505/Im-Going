@@ -26,6 +26,7 @@ import { api, ApiError } from "../api/client";
 import type { CityRow, SpotCategory, VenueSearchRow, VenueSort } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill } from "../components/hero";
+import { CardSkeleton, GoingNowInline, HeatBadge } from "../components/live";
 
 interface Props {
   onOpenSpot: (spotId: string) => void;
@@ -206,7 +207,11 @@ export function SearchScreen({ onOpenSpot }: Props): React.JSX.Element {
 
       {loading && rows === null ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <View style={styles.skelList}>
+            {Array.from({ length: 5 }, (_, i) => (
+              <CardSkeleton key={i} />
+            ))}
+          </View>
         </View>
       ) : error && rows !== null && rows.length === 0 ? (
         <View style={styles.center}>
@@ -273,6 +278,17 @@ export function SearchScreen({ onOpenSpot }: Props): React.JSX.Element {
                     {item.city}
                     {item.address ? ` · ${item.address}` : ""}
                   </Text>
+                </View>
+                <View style={styles.rowFoot}>
+                  <HeatBadge
+                    signals={{
+                      going_now: item.going_now ?? 0,
+                      heat_level: item.heat_level ?? 0,
+                      heat_count: item.heat_count ?? 0,
+                    }}
+                    size="sm"
+                  />
+                  <GoingNowInline count={item.going_now} compact />
                 </View>
               </Pressable>
             );
@@ -447,6 +463,16 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 12,
     flex: 1,
+  },
+  rowFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    flexWrap: "wrap",
+  },
+  skelList: {
+    width: "100%",
   },
   center: {
     flex: 1,

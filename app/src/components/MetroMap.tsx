@@ -16,6 +16,7 @@ import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-nati
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import type { SpotCategory } from "../api/types";
 import { colors, neon } from "../theme";
+import { HEAT_STYLES } from "./live";
 import {
   METRO_CITY_ANCHORS,
   pinRadius,
@@ -32,6 +33,15 @@ export interface VenuePin {
   lon: number;
   going_count: number;
   trending_score: number;
+  /**
+   * REVAMP 4 — real 60-min confirmation-velocity bucket (0 calm … 3 on_fire).
+   * Drives the pin glow/color so a room filling live reads at a glance.
+   */
+  heat_level?: 0 | 1 | 2 | 3;
+  /** REVAMP 4 — live bodies right now (real Going rows); card display only. */
+  going_now?: number;
+  /** REVAMP 4 — raw 60-min confirmation velocity; card display only. */
+  heat_count?: number;
 }
 
 interface Props {
@@ -138,12 +148,17 @@ export function MetroMap({
       const y = p.y * height;
       const hot = v.going_count > 0;
       const selected = v.id === selectedId;
+      // REVAMP 4 — real heat bucket colors (HEAT_STYLES, same as badges);
+      // fall back to the classic hot-pink once a spot has any going row.
+      const heatStyle = v.heat_level != null && v.heat_level > 0 ? HEAT_STYLES[v.heat_level] : null;
+      const fill = heatStyle ? heatStyle.color : hot ? HOT_FILL : selected ? SELECTED_FILL : QUIET_DOT;
+      const glow = heatStyle ? heatStyle.glow : hot ? HOT_GLOW : null;
       const r = pinRadius(v.going_count);
       return (
         <G key={v.id} onPress={onSelectVenue ? () => onSelectVenue(v) : undefined}>
-          {hot ? <Circle cx={x} cy={y} r={r + 6} fill={HOT_GLOW} /> : null}
+          {glow ? <Circle cx={x} cy={y} r={r + 6} fill={glow} /> : null}
           {selected ? <Circle cx={x} cy={y} r={r + 5} fill="none" stroke={SELECTED_FILL} strokeWidth={1.5} /> : null}
-          <Circle cx={x} cy={y} r={r} fill={hot ? HOT_FILL : selected ? SELECTED_FILL : QUIET_DOT} />
+          <Circle cx={x} cy={y} r={r} fill={fill} />
           {hot ? (
             <SvgText x={x} y={y + 3.5} fontSize={9} fontWeight="800" fill="#FFFFFF" textAnchor="middle">
               {String(v.going_count)}

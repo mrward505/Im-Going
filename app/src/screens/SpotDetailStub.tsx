@@ -45,7 +45,7 @@ import type {
 } from "../api/types";
 import { colors, spacing } from "../theme";
 import { CategoryPill, StarTag, formatNextStart } from "../components/hero";
-import { GoingWithYou, HeatBadge } from "../components/live";
+import { GoingWithYou, HeatBadge, TopGoerLine } from "../components/live";
 import { PostComposerSheet } from "../components/PostComposerSheet";
 
 interface Props {
@@ -391,6 +391,7 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
                   <GoingWithYou count={detail.going_with_you} mine={detail.my_going} />
                 </View>
               ) : null}
+              <TopGoerLine topGoer={detail?.top_goer} />
               {next.note ? (
                 <Text style={styles.note} numberOfLines={2}>
                   “{next.note}”
