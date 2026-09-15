@@ -241,12 +241,17 @@ describe.skipIf(skip)("REVAMP 5 — real goer clusters", () => {
     // Real people only — every listed goer is a users row.
     expect(row!.goers.length).toBeGreaterThan(0);
 
-    // Universal search rows carry the same real identities.
-    const search = await jfetch(`/api/v1/venues/search?q=${encodeURIComponent("")}&limit=100`);
+    // Universal search rows carry the same real identities. List the metro by
+    // OMITTING q — the API rejects an empty q (it wants 1–120 chars or none,
+    // per the client's own contract), so "show everything" means no q param.
+    const search = await jfetch("/api/v1/venues/search?limit=100");
     expect(search.status).toBe(200);
-    const srow = (search.body.venues as { id: string; goers: { id: string }[] }[]).find((v) => v.id === spot.spot_id);
+    const srow = (search.body.venues as { id: string; goers: { id: string; avatar_url: string | null }[] }[])
+      .find((v) => v.id === spot.spot_id);
     expect(srow).toBeDefined();
-    expect(Array.isArray(srow!.goers)).toBe(true);
+    const sGoer = srow!.goers.find((g) => g.id === me.id);
+    expect(sGoer).toBeDefined();
+    expect(sGoer!.avatar_url).toBe(avatarUrl);
   });
 
   test("my posts endpoint returns only my own real posts", async () => {

@@ -22,16 +22,19 @@ export interface AvatarIdentity {
 export function initialsOf(displayName: string | null | undefined): string {
   const parts = (displayName ?? "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "··";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  if (parts.length === 1) return (parts[0] ?? "").slice(0, 2).toUpperCase();
+  const first = parts[0] ?? "";
+  const last = parts[parts.length - 1] ?? "";
+  return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
 }
 
 /** Deterministic circle tint per person so initials avatars read as "theirs". */
-const TINTS = ["#FF4D6D", "#7C5CFF", "#3DDC97", "#FFB020", "#4EA8FF", "#FF7A3D"];
+const TINTS = ["#FF4D6D", "#7C5CFF", "#3DDC97", "#FFB020", "#4EA8FF", "#FF7A3D"] as const;
+const TINT_FALLBACK = "#5B5B6B";
 export function tintFor(seed: string): string {
   let h = 0;
   for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) % 9973;
-  return TINTS[h % TINTS.length];
+  return TINTS[h % TINTS.length] ?? TINT_FALLBACK;
 }
 
 export function Avatar({
