@@ -6,10 +6,23 @@
  * numbers are never invented.
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { api, ApiError } from "../api/client";
-import type { ImportedPost, InfluencerPull, User } from "../api/types";
+import type { ImportedPost, InfluencerPull, MyPostRow, User } from "../api/types";
 import { colors, spacing } from "../theme";
+import { Avatar } from "../components/Avatar";
+import { CONTENT_TYPE_BY_EXT, extOf, readBytes, uploadWithProgress } from "../components/PostComposerSheet";
 import { ImportFlowSheet } from "./ImportFlowSheet";
 
 interface Props {
@@ -178,6 +191,107 @@ const EMPTY_PULL: InfluencerPull = {
   avg_confirmations_per_announcement: null,
 };
 
+/**
+ * REVAMP 5 — "Your posts": the IG-style grid of photos/videos the viewer
+ * posted from a real spot (GET /api/v1/me/posts). Tap a tile to open it full
+ * screen with its caption and spot. A profile with no posts shows honest empty
+ * copy and points at the check-in → post loop (never a placeholder image).
+ */
+function PostsGrid({
+  posts,
+  loading,
+  error,
+  onRetry,
+  onOpen,
+}: {
+  posts: MyPostRow[];
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onOpen: (post: MyPostRow) => void;
+}): React.JSX.Element {
+  return (
+    <View style={styles.posts}>
+      <View style={styles.postsHead}>
+        <Text style={styles.postsKicker}>Your posts</Text>
+        <Text style={styles.postsCount}>{posts.length}</Text>
+      </View>
+      {loading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.md }} />
+      ) : error ? (
+        <View style={styles.importsError}>
+          <Text style={styles.error}>{error}</Text>
+          <Pressable onPress={onRetry} style={styles.retrySmall}>
+            <Text style={styles.retrySmallText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : posts.length === 0 ? (
+        <Text style={styles.postsEmpty}>
+          Nothing posted yet. Check in at a spot when you&apos;re there, then post a photo of your
+          night — it shows up here and on the spot.
+        </Text>
+      ) : (
+        <View style={styles.grid}>
+          {posts.map((p) => (
+            <Pressable key={p.id} onPress={() => onOpen(p)} style={styles.tile}>
+              {p.media_url && p.type === "image" ? (
+                <Image source={{ uri: p.media_url }} style={styles.tileImage} resizeMode="cover" />
+              ) : (
+                <View style={[styles.tileImage, styles.tileFallback]}>
+                  <Text style={styles.tileGlyph}>{p.type === "video" ? "▶" : "🖼"}</Text>
+                  <Text style={styles.tileGlyphLabel}>{p.type === "video" ? "Video" : "Post"}</Text>
+                </View>
+              )}
+              <View style={styles.tileFoot}>
+                <Text style={styles.tileSpot} numberOfLines={1}>
+                  {p.spot.name}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Full-screen viewer for one of my posts (photo + caption + spot + time). */
+function PostViewer({
+  post,
+  onClose,
+}: {
+  post: MyPostRow | null;
+  onClose: () => void;
+}): React.JSX.Element {
+  return (
+    <Modal visible={post != null} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.viewer}>
+        <View style={styles.viewerHead}>
+          <Text style={styles.viewerSpot} numberOfLines={1}>
+            {post?.spot.name ?? ""}
+          </Text>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <Text style={styles.close}>✕</Text>
+          </Pressable>
+        </View>
+        {post?.media_url && post.type === "image" ? (
+          <Image source={{ uri: post.media_url }} style={styles.viewerImage} resizeMode="contain" />
+        ) : (
+          <View style={styles.viewerFallback}>
+            <Text style={styles.viewerFallbackText}>
+              {post?.type === "video" ? "Video post" : "Media unavailable"}
+            </Text>
+          </View>
+        )}
+        {post?.caption ? <Text style={styles.viewerCaption}>{post.caption}</Text> : null}
+        <Text style={styles.viewerMeta}>
+          {post ? new Date(post.created_at).toLocaleString() : ""} · {post?.spot.city ?? ""}
+        </Text>
+      </View>
+    </Modal>
+  );
+}
+
 /** "your pull" — the concrete proof of the audience-visibility thesis. */
 function PullSection({ pull }: { pull: InfluencerPull }): React.JSX.Element {
   const follow =
@@ -237,6 +351,16 @@ export function ProfileScreen({ onLogout }: Props): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // REVAMP 5 — profile picture state (upload in flight / last failure).
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  // REVAMP 5 — my own native posts (the profile grid).
+  const [myPosts, setMyPosts] = useState<MyPostRow[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [openPost, setOpenPost] = useState<MyPostRow | null>(null);
+
   // REVAMP 3: "Bring your nights" imports (own load path — the card should
   // still render honestly if /me/pull hiccups).
   const [imports, setImports] = useState<ImportedPost[]>([]);
@@ -277,10 +401,118 @@ export function ProfileScreen({ onLogout }: Props): React.JSX.Element {
     }
   }, []);
 
+  const loadMyPosts = useCallback(async () => {
+    setPostsLoading(true);
+    setPostsError(null);
+    try {
+      const res = await api.myPosts({ limit: 30 });
+      setMyPosts(res.posts);
+    } catch (e) {
+      setPostsError(e instanceof ApiError ? e.message : "Could not load your posts");
+    } finally {
+      setPostsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
     void loadImports();
-  }, [load, loadImports]);
+    void loadMyPosts();
+  }, [load, loadImports, loadMyPosts]);
+
+  /**
+   * REVAMP 5 — set my profile picture through the real media contract:
+   * pick (or shoot) an image → requestUploadUrl(kind:"avatar") → PUT the bytes
+   * → PATCH /me/avatar with the returned object_key. The server resolves the
+   * public URL; the header re-renders from the returned user.
+   */
+  async function uploadAvatar(source: "camera" | "library"): Promise<void> {
+    setAvatarError(null);
+    try {
+      let picked: ImagePicker.ImagePickerAsset | null = null;
+      if (source === "camera") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          setAvatarError("Camera permission is needed to take your picture.");
+          return;
+        }
+        const res = await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        picked = res.canceled ? null : res.assets[0] ?? null;
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          setAvatarError("Photo library permission is needed to pick your picture.");
+          return;
+        }
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        picked = res.canceled ? null : res.assets[0] ?? null;
+      }
+      if (!picked) return;
+
+      setAvatarBusy(true);
+      const body = await readBytes(picked.uri);
+      const ext = extOf(picked.fileName, "jpg");
+      const contentType = CONTENT_TYPE_BY_EXT[ext] ?? "image/jpeg";
+      if (contentType.startsWith("video/")) {
+        setAvatarError("Pick a photo — profile pictures can't be video.");
+        return;
+      }
+      const slot = await api.requestUploadUrl({ content_type: contentType, ext, kind: "avatar" });
+      await uploadWithProgress(
+        slot.upload.upload_url,
+        slot.upload.method,
+        slot.upload.headers,
+        body,
+        () => undefined,
+      );
+      const res = await api.setAvatar(slot.upload.object_key);
+      setUser(res.user);
+    } catch (e) {
+      setAvatarError(e instanceof ApiError ? e.message : "Could not update your photo. Try again.");
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function removeAvatar(): Promise<void> {
+    setAvatarError(null);
+    setAvatarBusy(true);
+    try {
+      const res = await api.clearAvatar();
+      setUser(res.user);
+    } catch (e) {
+      setAvatarError(e instanceof ApiError ? e.message : "Could not remove your photo.");
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  /** The photo affordance: camera, library, or remove (only when one is set). */
+  function pickAvatar(): void {
+    if (avatarBusy) return;
+    Alert.alert(
+      user?.avatar_url ? "Change your photo" : "Add a profile photo",
+      "Your picture shows wherever you appear — going lists, clusters and your posts.",
+      [
+        { text: "Take photo", onPress: () => void uploadAvatar("camera") },
+        { text: "Choose from library", onPress: () => void uploadAvatar("library") },
+        ...(user?.avatar_url
+          ? [{ text: "Remove photo", style: "destructive" as const, onPress: () => void removeAvatar() }]
+          : []),
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  }
 
   async function handleDelete(id: string): Promise<void> {
     if (deletingId === id) {
@@ -299,10 +531,6 @@ export function ProfileScreen({ onLogout }: Props): React.JSX.Element {
     }
   }
 
-  const initials = user?.display_name
-    ? user.display_name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
-    : "??";
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Profile</Text>
@@ -317,9 +545,18 @@ export function ProfileScreen({ onLogout }: Props): React.JSX.Element {
         </>
       ) : user ? (
         <View style={styles.card}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          <Pressable onPress={pickAvatar} disabled={avatarBusy} style={styles.avatarWrap}>
+            <Avatar identity={user} size={96} />
+            <View style={styles.avatarBadge}>
+              <Text style={styles.avatarBadgeText}>{avatarBusy ? "…" : user.avatar_url ? "✎" : "+"}</Text>
+            </View>
+          </Pressable>
+          <Pressable onPress={pickAvatar} disabled={avatarBusy}>
+            <Text style={styles.avatarCta}>
+              {avatarBusy ? "Uploading…" : user.avatar_url ? "Change photo" : "Add photo"}
+            </Text>
+          </Pressable>
+          {avatarError ? <Text style={styles.error}>{avatarError}</Text> : null}
           <Text style={styles.name}>{user.display_name}</Text>
           <Text style={styles.username}>@{user.username}</Text>
           <Text style={styles.city}>📍 {user.city}</Text>
@@ -340,6 +577,14 @@ export function ProfileScreen({ onLogout }: Props): React.JSX.Element {
           </Pressable>
         </View>
       ) : null}
+      <PostsGrid
+        posts={myPosts}
+        loading={postsLoading}
+        error={postsError}
+        onRetry={() => void loadMyPosts()}
+        onOpen={(p) => setOpenPost(p)}
+      />
+      <PostViewer post={openPost} onClose={() => setOpenPost(null)} />
       <ImportSection
         imports={imports}
         limit={importsLimit}
@@ -520,6 +765,157 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   // --- REVAMP 3: "Bring your nights" ----------------------------------------
+  // --- REVAMP 5: profile picture + my posts grid ------------------------------
+  avatarWrap: {
+    marginBottom: spacing.sm,
+  },
+  avatarBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarBadgeText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
+  avatarCta: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: spacing.sm,
+  },
+  posts: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: spacing.lg,
+  },
+  postsHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  postsKicker: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  postsCount: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  postsEmpty: {
+    color: colors.textDim,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: spacing.sm,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: spacing.md,
+  },
+  tile: {
+    width: "31.5%",
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+  },
+  tileImage: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: colors.surfaceAlt,
+  },
+  tileFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileGlyph: {
+    fontSize: 22,
+    color: colors.text,
+  },
+  tileGlyphLabel: {
+    color: colors.textDim,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  tileFoot: {
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+  },
+  tileSpot: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  viewer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  viewerHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  viewerSpot: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "800",
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  close: {
+    color: colors.textDim,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  viewerImage: {
+    width: "100%",
+    height: 380,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceAlt,
+  },
+  viewerFallback: {
+    width: "100%",
+    height: 220,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerFallbackText: {
+    color: colors.textDim,
+    fontSize: 14,
+  },
+  viewerCaption: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: spacing.md,
+  },
+  viewerMeta: {
+    color: colors.textDim,
+    fontSize: 12,
+    marginTop: spacing.sm,
+  },
   imports: {
     marginTop: spacing.lg,
     backgroundColor: colors.card,

@@ -18,6 +18,8 @@ export interface UserRow {
   star_rating: number;
   verified_checkin_count: number;
   location_permission_granted: boolean;
+  avatar_object_key: string | null; // REVAMP 5: storage key (single source of truth)
+  avatar_url: string | null;        // REVAMP 5: resolved public URL for rendering
   created_at: string;
   deleted_at: string | null;
 }
@@ -98,6 +100,7 @@ export function serializeUser(u: UserRow): Record<string, unknown> {
     reputation_points: u.reputation_points,
     star_rating: effectiveStars(u.reputation_points, u.verified_checkin_count),
     verified_checkin_count: u.verified_checkin_count,
+    avatar_url: u.avatar_url ?? null,
     created_at: u.created_at,
   };
 }
@@ -228,7 +231,7 @@ export interface PostRow {
 
 export interface FeedRow extends PostRow {
   event: { id: string; start_at: string; status: string; going_count: number };
-  poster: { id: string; display_name: string; star_rating: number };
+  poster: { id: string; display_name: string; star_rating: number; avatar_url: string | null };
   spot_is_verified: boolean;
 }
 
@@ -276,16 +279,31 @@ export function serializePostForViewer(
 
 /**
  * The Live feed groups by spot, so the poster's display identity rides on the
- * post row (spec §2f: display_name + star_rating next to each post).
+ * post row (spec §2f: display_name + star_rating next to each post). REVAMP 5
+ * adds the poster's avatar_url (null → client falls back to initials).
  */
 export interface FeedPoster {
   id: string;
   display_name: string;
   star_rating: number;
+  avatar_url: string | null;
 }
 
 export function serializeFeedPoster(poster: FeedPoster): FeedPoster {
-  return { id: poster.id, display_name: poster.display_name, star_rating: poster.star_rating };
+  return { id: poster.id, display_name: poster.display_name, star_rating: poster.star_rating, avatar_url: poster.avatar_url ?? null };
+}
+
+/**
+ * A compact goer identity for avatar clusters (REVAMP 5): real users ordered
+ * by credibility so the trending/search cluster can overlap actual avatar
+ * images. `avatar_url` null → initials fallback.
+ */
+export interface GoerIdentity {
+  id: string;
+  display_name: string;
+  username: string;
+  star_rating: number;
+  avatar_url: string | null;
 }
 
 // --- REVAMP 3: social import ("Bring your nights") ----------------------------

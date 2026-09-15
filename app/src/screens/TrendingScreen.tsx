@@ -55,7 +55,7 @@ function TrendingCard({ row, rank, onOpen }: { row: TrendingRow; rank: number; o
         <Text style={styles.time}>{formatNextStart(row.next_start_at)}</Text>
       </View>
       <View style={styles.cardFoot}>
-        <AvatarCluster count={row.going_count} />
+        <AvatarCluster count={row.going_count} goers={row.goers} />
         <HeatBadge
           signals={{
             going_now: row.going_now ?? 0,

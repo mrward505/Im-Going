@@ -25,7 +25,7 @@ import {
 import { api, ApiError } from "../api/client";
 import type { CityRow, SpotCategory, VenueSearchRow, VenueSort } from "../api/types";
 import { colors, spacing } from "../theme";
-import { CategoryPill } from "../components/hero";
+import { AvatarCluster, CategoryPill } from "../components/hero";
 import { CardSkeleton, GoingNowInline, HeatBadge } from "../components/live";
 
 interface Props {
@@ -255,7 +255,6 @@ export function SearchScreen({ onOpenSpot }: Props): React.JSX.Element {
             ) : null
           }
           renderItem={({ item }) => {
-            const hot = item.going_count > 0;
             return (
               <Pressable
                 onPress={() => onOpenSpot(item.id)}
@@ -265,12 +264,6 @@ export function SearchScreen({ onOpenSpot }: Props): React.JSX.Element {
                   <Text style={styles.rowName} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <View style={styles.rowCount}>
-                    {hot ? <View style={styles.liveDot} /> : null}
-                    <Text style={[styles.rowGoing, hot ? styles.rowGoingHot : styles.rowGoingQuiet]}>
-                      {item.going_count} going
-                    </Text>
-                  </View>
                 </View>
                 <View style={styles.rowMeta}>
                   <CategoryPill category={item.category} />
@@ -280,6 +273,8 @@ export function SearchScreen({ onOpenSpot }: Props): React.JSX.Element {
                   </Text>
                 </View>
                 <View style={styles.rowFoot}>
+                  {/* REVAMP 5 — the real people going, faces not dots. */}
+                  <AvatarCluster count={item.going_count ?? 0} goers={item.goers} size={22} />
                   <HeatBadge
                     signals={{
                       going_now: item.going_now ?? 0,

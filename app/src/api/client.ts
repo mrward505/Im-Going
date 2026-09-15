@@ -13,6 +13,7 @@ import type {
   CancelGoingResponse,
   CheckinResponse,
   CitiesResponse,
+  ClearAvatarResponse,
   ConfirmGoingResponse,
   CreateImportInput,
   CreateImportResponse,
@@ -25,6 +26,7 @@ import type {
   MeResponse,
   ModerationReason,
   MyGoingResponse,
+  MyPostsResponse,
   OtpRequestResponse,
   OtpVerifyResponse,
   PostMediaType,
@@ -32,6 +34,7 @@ import type {
   RegisterResponse,
   ReportPostResponse,
   RequestUploadUrlResponse,
+  SetAvatarResponse,
   ShareResponse,
   SpotDetailResponse,
   SpotFeedResponse,
@@ -299,6 +302,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     });
+  },
+  // --- REVAMP 5: profile pictures + my own posts ------------------------------
+  /** Set my profile picture to an object_key minted with kind:"avatar". */
+  setAvatar(objectKey: string): Promise<SetAvatarResponse> {
+    return request("/api/v1/me/avatar", {
+      method: "PATCH",
+      body: JSON.stringify({ object_key: objectKey }),
+    });
+  },
+  /** Clear my profile picture — the app falls back to initials. */
+  clearAvatar(): Promise<ClearAvatarResponse> {
+    return request("/api/v1/me/avatar", { method: "DELETE" });
+  },
+  /** My own native posts (the profile photo grid). */
+  myPosts(params: { limit?: number; offset?: number } = {}): Promise<MyPostsResponse> {
+    const qs = new URLSearchParams();
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params.offset !== undefined) qs.set("offset", String(params.offset));
+    const suffix = qs.toString();
+    return request(`/api/v1/me/posts${suffix ? `?${suffix}` : ""}`);
   },
   // --- REVAMP 3: social import ("Bring your nights") --------------------------
   myImports(): Promise<ImportsResponse> {

@@ -54,7 +54,22 @@ export interface User {
   reputation_points: number;
   star_rating: number; // 1.0–5.0
   verified_checkin_count: number;
+  /** REVAMP 5 — public profile picture URL (null → render initials). */
+  avatar_url: string | null;
   created_at: string;
+}
+
+/**
+ * REVAMP 5 — a real goer identity behind an avatar cluster (GoerIdentity in
+ * server/src/db.ts): a users row joined to an active Going. `avatar_url` null
+ * → the client falls back to initials. Never fabricated.
+ */
+export interface GoerIdentity {
+  id: string;
+  display_name: string;
+  username: string;
+  star_rating: number;
+  avatar_url: string | null;
 }
 
 /** Spot.category CHECK: bar|club|concert|restaurant|house|other */
@@ -110,6 +125,12 @@ export interface TrendingResponse {
     next_start_at: string;
     going_count: number;
     trending_score: number;
+    /**
+     * REVAMP 5 — the real goers behind this spot's cluster (highest
+     * credibility first, ≤5): the card overlaps their actual profile pictures.
+     * [] when nobody has confirmed going yet.
+     */
+    goers: GoerIdentity[];
     /** Bodies in the event window right now ([start−30m, start+150m]). */
     going_now: number;
     /** Raw confirmation velocity: active goings created in the last 60 min. */
@@ -171,6 +192,8 @@ export interface VenueSearchRow {
   going_now: number;
   heat_count: number;
   heat_level: SpotAudienceSignals["heat_level"];
+  /** REVAMP 5 — real goers behind the card's cluster ([] when quiet). */
+  goers: GoerIdentity[];
 }
 
 export interface VenuesSearchResponse {
@@ -238,7 +261,7 @@ export interface SpotDetailResponse {
    * viewer (real Going rows joined to users); null when no one else is going
    * or no next event. Drives the "X's going" pull line.
    */
-  top_goer: { display_name: string; star_rating: number } | null;
+  top_goer: { display_name: string; star_rating: number; avatar_url: string | null } | null;
 }
 /** GET /api/v1/spots/:id/share — share-card snapshot + live share budget (slice 4c). */
 export interface SpotShareResponse {
@@ -270,6 +293,8 @@ export interface GoingEntry {
   display_name: string;
   username: string;
   star_rating: number;
+  /** REVAMP 5 — profile picture (null → initials fallback). */
+  avatar_url: string | null;
   is_me: boolean;
 }
 
@@ -412,6 +437,8 @@ export interface FeedPoster {
   id: string;
   display_name: string;
   star_rating: number;
+  /** REVAMP 5 — profile picture (null → initials fallback). */
+  avatar_url: string | null;
 }
 
 /** GET /api/v1/spots/:id/feed — the spot's Live feed (newest first). */
@@ -514,4 +541,33 @@ export interface DeleteImportResponse {
   id: string;
   imports_remaining: number;
   limit: number;
+}
+
+// --- REVAMP 5: profile pictures + native outing posts -------------------------
+
+/** PATCH /api/v1/me/avatar — set my profile picture (returns the updated user). */
+export type SetAvatarResponse = MeResponse;
+
+/** DELETE /api/v1/me/avatar — clear it (back to initials). */
+export type ClearAvatarResponse = MeResponse;
+
+/** A row of GET /api/v1/me/posts — my own native post, for the profile grid. */
+export interface MyPostRow {
+  id: string;
+  event_id: string;
+  spot_id: string;
+  type: PostMediaType;
+  caption: string | null;
+  media_url: string | null;
+  width: number | null;
+  height: number | null;
+  duration_s: number | null;
+  created_at: string;
+  spot: { id: string; name: string; city: string; is_verified: boolean };
+}
+
+/** GET /api/v1/me/posts */
+export interface MyPostsResponse {
+  posts: MyPostRow[];
+  pagination: { limit: number; offset: number; count: number };
 }

@@ -4,7 +4,9 @@
  */
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { GoerIdentity } from "../api/types";
 import { colors, spacing } from "../theme";
+import { AvatarStack } from "./Avatar";
 
 const CATEGORY_LABELS: Record<string, string> = {
   bar: "Bar",
@@ -37,37 +39,33 @@ export function StarTag({ stars }: { stars: number }): React.JSX.Element {
 }
 
 /**
- * Star-weighted avatar cluster (spec §3.2): up to 5 overlapping initial
- * circles; border color encodes the confirmer's star band (gold ≥ 4,
- * purple ≥ 3, dim below). Trending rows only carry a count, so the count
- * doubles as the cluster seed — full confirmer names arrive in 4c.
+ * Avatar cluster for a spot card (spec §3.2, extended REVAMP 5): the real
+ * goers' profile pictures, overlapped, highest credibility first. The server
+ * sends the identities (Going ⋈ users) so nothing is fabricated; members
+ * without a picture show their initials, and the count is always the true
+ * number of active confirmations. Nobody going yet → honest empty copy.
  */
-export function AvatarCluster({ count }: { count: number }): React.JSX.Element {
-  const shown = Math.min(5, Math.max(count, 0));
-  if (shown === 0) {
+export function AvatarCluster({
+  count,
+  goers,
+  size = 26,
+}: {
+  count: number;
+  goers?: GoerIdentity[] | null;
+  size?: number;
+}): React.JSX.Element {
+  const people = (goers ?? []).slice(0, 5);
+  if (count <= 0 && people.length === 0) {
     return (
       <View style={styles.emptyCluster}>
         <Text style={styles.emptyClusterText}>Be the first going</Text>
       </View>
     );
   }
-  const bands = [colors.star, colors.star, colors.primary, colors.primary, colors.textDim];
   return (
     <View style={styles.cluster}>
-      {Array.from({ length: shown }, (_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.avatar,
-            { borderColor: bands[i] ?? colors.textDim, marginLeft: i === 0 ? 0 : -10, zIndex: shown - i },
-          ]}
-        >
-          <Text style={styles.avatarText}>●</Text>
-        </View>
-      ))}
-      <Text style={styles.clusterCount}>
-        {count} going
-      </Text>
+      <AvatarStack goers={people} count={count} size={size} />
+      <Text style={styles.clusterCount}>{count} going</Text>
     </View>
   );
 }
@@ -118,19 +116,6 @@ const styles = StyleSheet.create({
   cluster: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  avatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: colors.textDim,
-    fontSize: 8,
   },
   clusterCount: {
     color: colors.textDim,

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getPool } from "../db/pool";
 import { serializePostForViewer, serializeSpotRaw, type PostRow, type FeedRow } from "../db";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
-import { getStorage } from "../lib/storage";
+import { getStorage, isAvatarContentType } from "../lib/storage";
 
 // Spec §2f: post body — image or ≤10 s video, 140-char caption, the object key
 // the client received from the storage contract (requestUploadUrl → PUT → key).
@@ -139,7 +139,7 @@ export async function registerPostRoutes(app: FastifyInstance): Promise<void> {
                 'going_count', (SELECT count(*)::int FROM going g2
                                 WHERE g2.event_id = e.id AND g2.status = 'active')) AS event,
               json_build_object('id', u.id, 'display_name', u.display_name,
-                'star_rating', u.star_rating) AS poster,
+                'star_rating', u.star_rating, 'avatar_url', u.avatar_url) AS poster,
               s.is_verified AS spot_is_verified
        FROM posts p
        JOIN events e ON e.id = p.event_id
@@ -179,6 +179,11 @@ export async function registerPostRoutes(app: FastifyInstance): Promise<void> {
   }, async (req, reply) => {
     const claims = req.userClaims!;
     const body = uploadUrlSchema.parse(req.body);
+    // REVAMP 5: avatar slots are pictures only — a profile picture can never be
+    // a video, and the key lands in the caller's own avatars/ namespace.
+    if (body.kind === "avatar" && !isAvatarContentType(body.content_type)) {
+      throw badRequest("profile pictures must be image/jpeg, image/png or image/heic");
+    }
     const upload = await getStorage().requestUploadUrl(body, claims.sub);
     return reply.code(201).send({ upload });
   });
@@ -204,6 +209,50 @@ export async function registerPostRoutes(app: FastifyInstance): Promise<void> {
       .header("content-type", obj.contentType)
       .header("cache-control", "public, max-age=31536000, immutable")
       .send(obj.bytes);
+  });
+
+  // --- my own posts (REVAMP 5): the profile photo grid ----------------------
+  // GET /api/v1/me/posts — every real post the viewer published from a
+  // verified check-in, newest first. The profile renders these as the
+  // IG-style grid next to the imported posts. No invented rows: an empty
+  // profile returns an empty list.
+  app.get("/api/v1/me/posts", {
+    preHandler: app.authenticate,
+  }, async (req) => {
+    const claims = req.userClaims!;
+    const raw = feedQuerySchema.parse(req.query);
+    const q = { limit: Math.min(raw.limit, FEED_LIMIT_CAP), offset: raw.offset };
+    const { rows } = await pool.query<{
+      id: string; event_id: string; spot_id: string; type: string; caption: string | null;
+      object_key: string; width: number | null; height: number | null; duration_s: number | null;
+      created_at: string; spot_name: string; spot_city: string; spot_is_verified: boolean;
+    }>(
+      `SELECT p.id, p.event_id, p.spot_id, p.type, p.caption, p.object_key, p.width, p.height,
+              p.duration_s, p.created_at,
+              s.name AS spot_name, s.city AS spot_city, s.is_verified AS spot_is_verified
+       FROM posts p JOIN spots s ON s.id = p.spot_id
+       WHERE p.user_id = $1
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT $2 OFFSET $3`,
+      [claims.sub, q.limit, q.offset],
+    );
+    const storage = getStorage();
+    return {
+      posts: rows.map((row) => ({
+        id: row.id,
+        event_id: row.event_id,
+        spot_id: row.spot_id,
+        type: row.type === "video" ? "video" : "image",
+        caption: row.caption,
+        media_url: storage.getPublicUrl(row.object_key),
+        width: row.width,
+        height: row.height,
+        duration_s: row.duration_s,
+        created_at: row.created_at,
+        spot: { id: row.spot_id, name: row.spot_name, city: row.spot_city, is_verified: row.spot_is_verified },
+      })),
+      pagination: { limit: q.limit, offset: q.offset, count: rows.length },
+    };
   });
 
   // --- moderation report (spec §2f/§4 ModerationReport) ----------------------

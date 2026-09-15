@@ -45,8 +45,14 @@ export interface StorageProvider {
 // --- local/dev provider -------------------------------------------------------
 
 const UPLOAD_TTL_MS = 15 * 60_000;
-/** Keys we mint locally: posts/<userId-uuid>/<16-hex>.<ext> — nothing else serves. */
-const LOCAL_KEY_RE = /^posts\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(jpg|png|heic|mp4|mov)$/;
+/**
+ * Keys we mint locally — nothing else serves:
+ *   posts/<userId-uuid>/<16-hex>.<ext>     (event posts)
+ *   avatars/<userId-uuid>/<16-hex>.<ext>   (REVAMP 5 profile pictures)
+ */
+const LOCAL_KEY_RE = /^(posts|avatars)\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(jpg|png|heic|mp4|mov)$/;
+/** Avatar uploads are images only (profile pictures). */
+const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/heic"]);
 
 /**
  * Address of the running Fastify server, set by index.ts at listen time. The
@@ -87,6 +93,22 @@ export function isLocalObjectKey(key: string): boolean {
   return LOCAL_KEY_RE.test(key);
 }
 
+/** The user id segment embedded in a minted key (null when the shape is wrong). */
+export function objectKeyOwner(key: string): string | null {
+  const m = /^(?:posts|avatars)\/([0-9a-f-]{36})\//.exec(key);
+  return m?.[1] ?? null;
+}
+
+/** True for keys minted with kind:"avatar" (the profile-picture namespace). */
+export function isAvatarObjectKey(key: string): boolean {
+  return /^avatars\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(jpg|png|heic)$/.test(key);
+}
+
+/** Avatars are images only — videos are rejected at upload-url time. */
+export function isAvatarContentType(contentType: string): boolean {
+  return AVATAR_CONTENT_TYPES.has(contentType);
+}
+
 class LocalStorageProvider implements StorageProvider {
   readonly name = "local";
   private baseDir: string;
@@ -110,10 +132,13 @@ class LocalStorageProvider implements StorageProvider {
 
   async requestUploadUrl(req: UploadUrlRequest, userId: string): Promise<UploadUrlResponse> {
     const ext = safeExt(req);
-    // Key layout: posts/<userId>/<16-hex>.<ext> — one dir per poster, no
-    // user-controlled path components, collision-safe.
+    // Key layout: <kind>/<userId>/<16-hex>.<ext> — one dir per poster, no
+    // user-controlled path components, collision-safe. REVAMP 5: avatars live
+    // in their own namespace so a profile picture can never be posted as an
+    // event photo (and vice versa).
+    const prefix = req.kind === "avatar" ? "avatars" : "posts";
     const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 8) + Date.now().toString(16).padStart(8, "0");
-    const objectKey = `posts/${userId}/${rand.slice(0, 16)}.${ext}`;
+    const objectKey = `${prefix}/${userId}/${rand.slice(0, 16)}.${ext}`;
     return {
       object_key: objectKey,
       upload_url: `${this.baseUrl()}/api/v1/media/upload/${objectKey.split("/").map(encodeURIComponent).join("/")}`,

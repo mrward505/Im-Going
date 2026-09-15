@@ -14,6 +14,7 @@ import { registerCheckinRoutes } from "./routes/checkins";
 import { registerPostRoutes } from "./routes/posts";
 import { registerInviteRoutes } from "./routes/invites";
 import { registerImportRoutes } from "./routes/imports";
+import { registerProfileRoutes } from "./routes/profile";
 import { registerTrendingRoutes, registerShareRoutes } from "./routes/trending";
 import { toApiError } from "./lib/errors";
 import { setServerAddress } from "./lib/storage";
@@ -78,7 +79,7 @@ export async function buildApp() {
     if (typeof origin === "string" && corsOrigins.has(origin)) {
       reply.header("access-control-allow-origin", origin);
       reply.header("vary", "Origin");
-      reply.header("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+      reply.header("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
       reply.header("access-control-allow-headers", "content-type, authorization");
       reply.header("access-control-max-age", "86400");
       if (req.method === "OPTIONS") return reply.code(204).send();
@@ -115,6 +116,7 @@ export async function buildApp() {
   await registerPostRoutes(app);
   await registerInviteRoutes(app);
   await registerImportRoutes(app);
+  await registerProfileRoutes(app);
   await registerTrendingRoutes(app);
   await registerShareRoutes(app);
 

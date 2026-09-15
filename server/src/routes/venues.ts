@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../db/pool";
-import { spotAudience } from "../lib/audience";
+import { spotAudience, spotGoers } from "../lib/audience";
 
 /**
  * Venue discovery (slices 2 + revamp 1).
@@ -199,6 +199,10 @@ export async function registerVenueRoutes(app: FastifyInstance): Promise<void> {
         going_now: aud.going_now,
         heat_count: aud.heat_count,
         heat_level: aud.heat_level,
+        // REVAMP 5 — real goer identities for the search card's avatar
+        // cluster (avatars when set, initials otherwise). Real rows only:
+        // an empty cluster means nobody has confirmed going yet.
+        goers: await spotGoers(pool, row.id as string),
       };
     }));
 

@@ -46,6 +46,7 @@ import type {
 import { colors, spacing } from "../theme";
 import { CategoryPill, StarTag, formatNextStart } from "../components/hero";
 import { GoingWithYou, HeatBadge, TopGoerLine } from "../components/live";
+import { Avatar } from "../components/Avatar";
 import { PostComposerSheet } from "../components/PostComposerSheet";
 
 interface Props {
@@ -95,6 +96,8 @@ function FeedItem({
   return (
     <View style={styles.post}>
       <View style={styles.postHead}>
+        {/* REVAMP 5 — the poster's real profile picture next to their name. */}
+        <Avatar identity={row.poster} size={30} />
         <Text style={styles.poster} numberOfLines={1}>
           {row.poster.display_name}
         </Text>
@@ -415,16 +418,27 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
                     </Text>
                   )}
                 </Pressable>
-                {inWindow && !checkedIn ? (
+                {/*
+                  REVAMP 5 (owner re-test fixes): the check-in button is always
+                  visible so the flow is discoverable — it is disabled (with the
+                  honest reason below) while the window is closed or before you
+                  tap "I'm going". Location is verified for real against the
+                  spot's geofence; there is no bypass.
+                */}
+                {!checkedIn ? (
                   <Pressable
                     onPress={() => void checkIn()}
-                    disabled={checkingIn}
-                    style={({ pressed }) => [styles.checkinButton, pressed && styles.pressed]}
+                    disabled={checkingIn || !inWindow || !myGoing}
+                    style={({ pressed }) => [
+                      styles.checkinButton,
+                      (!inWindow || !myGoing) && styles.checkinDisabled,
+                      pressed && inWindow && myGoing && styles.pressed,
+                    ]}
                   >
                     {checkingIn ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.goingButtonText}>I&apos;m here</Text>
+                      <Text style={styles.goingButtonText}>I&apos;m here — check in</Text>
                     )}
                   </Pressable>
                 ) : null}
@@ -434,15 +448,23 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
                     onPress={() => setComposerOpen(true)}
                     style={({ pressed }) => [styles.postButton, pressed && styles.pressed]}
                   >
-                    <Text style={styles.goingButtonText}>Post 📸</Text>
+                    <Text style={styles.goingButtonText}>Post a photo 📸</Text>
                   </Pressable>
                 ) : null}
               </View>
               {!inWindow && !checkedIn ? (
                 <Text style={styles.windowHint}>
                   {win && now < win.open
-                    ? "Check-in opens 30 min before start."
-                    : "Check-in window has closed."}
+                    ? "Check-in opens 30 min before start — you'll be able to post then."
+                    : "Check-in window has closed for this event."}
+                </Text>
+              ) : !myGoing && !checkedIn ? (
+                <Text style={styles.windowHint}>
+                  Tap “I&apos;m going” first, then check in here when you arrive — we verify your real location.
+                </Text>
+              ) : !checkedIn ? (
+                <Text style={styles.windowHint}>
+                  When you get there, tap check in — we verify your real location before you can post.
                 </Text>
               ) : null}
               {actionError ? <Text style={styles.inlineError}>{actionError}</Text> : null}
@@ -458,6 +480,8 @@ export function SpotDetailStub({ spotId, onBack }: Props): React.JSX.Element {
               {going && going.going.length > 0 ? (
                 going.going.map((g) => (
                   <View key={g.user_id} style={[styles.goingRow, g.is_me && styles.goingRowMe]}>
+                    {/* REVAMP 5 — profile picture (initials when none set). */}
+                    <Avatar identity={g} size={34} />
                     <Text style={[styles.goingName, g.is_me && styles.goingNameMe]} numberOfLines={1}>
                       {g.display_name}
                       {g.is_me ? " · you" : ""}
@@ -667,6 +691,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
+  checkinDisabled: {
+    backgroundColor: colors.surfaceAlt,
+    opacity: 0.55,
+  },
   goingButtonText: {
     color: "#fff",
     fontWeight: "700",
@@ -704,7 +732,7 @@ const styles = StyleSheet.create({
   goingRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: 10,
