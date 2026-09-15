@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import type { GoerIdentity } from "../db";
 
 /**
  * Live-audience aggregates (Slice 4d-3a) — every number comes from real
@@ -61,6 +62,49 @@ export async function spotAudience(pool: Pool, spotId: string): Promise<SpotAudi
   );
   const heat_count = rows[0]?.heat_count ?? 0;
   return { going_now: rows[0]?.going_now ?? 0, heat_count, heat_level: heatLevel(heat_count) };
+}
+
+/**
+ * REVAMP 5 — the real goers behind a spot's cluster. The Trending/Search cards
+ * overlap these identities' actual profile pictures (initials when a user has
+ * no picture yet) instead of anonymous dots, so a card reads like a room of
+ * people rather than a count. Every row is a real users row joined to an
+ * active Going on a live (not-yet-ended) event at the spot; highest-credibility
+ * first, stable by confirmation time. Never invented, never padded — a quiet
+ * spot returns [] and the client shows the count alone.
+ */
+export const GOER_CLUSTER_LIMIT = 5;
+
+export async function spotGoers(
+  pool: Pool,
+  spotId: string,
+  limit: number = GOER_CLUSTER_LIMIT,
+): Promise<GoerIdentity[]> {
+  const { rows } = await pool.query<GoerIdentity>(
+    `SELECT DISTINCT ON (u.id)
+            u.id, u.display_name, u.username, u.star_rating::float AS star_rating, u.avatar_url
+     FROM going g
+     JOIN events e ON e.id = g.event_id
+     JOIN users u ON u.id = g.user_id
+     WHERE e.spot_id = $1 AND e.status = 'active' AND g.status = 'active'
+       AND e.default_end > now() AND u.deleted_at IS NULL
+     ORDER BY u.id
+     LIMIT 100`,
+    [spotId],
+  );
+  // Credibility order in JS so DISTINCT ON (u.id) can keep one row per person
+  // (a goer may hold goings on several events at the same spot) and the LIMIT
+  // is applied to people, not rows.
+  const ordered = rows
+    .sort((a, b) => (b.star_rating - a.star_rating) || a.id.localeCompare(b.id))
+    .slice(0, Math.max(0, limit));
+  return ordered.map((g) => ({
+    id: g.id,
+    display_name: g.display_name,
+    username: g.username,
+    star_rating: Number(g.star_rating),
+    avatar_url: g.avatar_url ?? null,
+  }));
 }
 
 /** "N people are going with you": active goings on an event, excluding me. */

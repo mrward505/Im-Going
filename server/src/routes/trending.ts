@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getPool } from "../db/pool";
 import { spotTrending, TRENDING_LIMIT } from "../lib/trending";
-import { spotAudience } from "../lib/audience";
+import { spotAudience, spotGoers } from "../lib/audience";
 import { serializeSpotRaw, findSpotById } from "../db";
 import { SHARE_LIMIT_PER_DAY, consumeShare, shareBudgetRemaining } from "../lib/limits";
 
@@ -39,6 +39,9 @@ export async function registerTrendingRoutes(app: FastifyInstance): Promise<void
         next_start_at: r.next_start_at,
         going_count: r.going_count,
         trending_score: r.trending_score,
+        // REVAMP 5 — the real people behind the cluster, so the card can
+        // overlap actual profile pictures instead of anonymous dots.
+        goers: await spotGoers(pool, r.spot_id),
         ...(await spotAudience(pool, r.spot_id)),
       };
     }));

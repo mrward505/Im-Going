@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { colors, spacing } from "../theme";
+import { Avatar } from "./Avatar";
 
 export interface HeatSignal {
   going_now: number;
@@ -169,18 +170,19 @@ export function GoingNowInline({
 /**
  * REVAMP 4 — "X's going" pull line: the highest-star active goer on the next
  * event (real Going rows, server picks top_goer). Makes an influencer's pull
- * concrete. Renders nothing when no one else is going.
+ * concrete. REVAMP 5 adds their profile picture next to the name (initials
+ * when they have none). Renders nothing when no one else is going.
  */
 export function TopGoerLine({
   topGoer,
 }: {
-  topGoer: { display_name: string; star_rating: number } | null | undefined;
+  topGoer: { display_name: string; star_rating: number; avatar_url?: string | null } | null | undefined;
 }): React.JSX.Element | null {
   if (!topGoer) return null;
   const gold = topGoer.star_rating >= 4;
   return (
     <View style={styles.topGoerLine}>
-      <Text style={styles.topGoerStar}>{gold ? "★" : "·"}</Text>
+      <Avatar identity={topGoer} size={20} />
       <Text style={styles.topGoerName} numberOfLines={1}>
         {topGoer.display_name}&apos;s going
       </Text>
