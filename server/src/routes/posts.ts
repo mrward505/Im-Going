@@ -139,7 +139,7 @@ export async function registerPostRoutes(app: FastifyInstance): Promise<void> {
                 'going_count', (SELECT count(*)::int FROM going g2
                                 WHERE g2.event_id = e.id AND g2.status = 'active')) AS event,
               json_build_object('id', u.id, 'display_name', u.display_name,
-                'star_rating', u.star_rating) AS poster,
+                'star_rating', u.star_rating, 'avatar_url', u.avatar_url) AS poster,
               s.is_verified AS spot_is_verified
        FROM posts p
        JOIN events e ON e.id = p.event_id

@@ -132,9 +132,10 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     if (!event) throw notFound("event not found");
     const viewerId = req.userClaims?.sub ?? null;
     const { rows } = await pool.query<{
-      user_id: string; display_name: string; username: string; star_rating: number; is_me: boolean;
+      user_id: string; display_name: string; username: string; star_rating: number; avatar_url: string | null; is_me: boolean;
     }>(
       `SELECT g.user_id, u.display_name, u.username, u.star_rating::float AS star_rating,
+              u.avatar_url,
               ($2::uuid IS NOT NULL AND g.user_id = $2) AS is_me
        FROM going g JOIN users u ON u.id = g.user_id
        WHERE g.event_id = $1 AND g.status = 'active'
@@ -216,10 +217,10 @@ export async function registerEventRoutes(app: FastifyInstance): Promise<void> {
     // REVAMP 4 — "X's going": the highest-credibility active goer on the next
     // event (excluding the viewer, real Going rows joined to the users table).
     // Makes an influencer's pull concrete without any invented numbers.
-    let topGoer: { display_name: string; star_rating: number } | null = null;
+    let topGoer: { display_name: string; star_rating: number; avatar_url: string | null } | null = null;
     if (next) {
-      const { rows: tg } = await pool.query<{ display_name: string; star_rating: number }>(
-        `SELECT u.display_name, u.star_rating::float AS star_rating
+      const { rows: tg } = await pool.query<{ display_name: string; star_rating: number; avatar_url: string | null }>(
+        `SELECT u.display_name, u.star_rating::float AS star_rating, u.avatar_url
          FROM going g JOIN users u ON u.id = g.user_id
          WHERE g.event_id = $1 AND g.status = 'active'
            AND ($2::uuid IS NULL OR g.user_id <> $2::uuid)
